@@ -29,10 +29,8 @@ export const LoginForm = () => {
     try {
       const response = await authAPI.login(data);
       
-      // Save auth data to store
       setAuth(response.user, response.company || null, response.access_token);
 
-      // Redirect based on whether user has a company
       if (response.company) {
         router.push('/dashboard');
       } else {
@@ -49,9 +47,9 @@ export const LoginForm = () => {
     <div className="w-full max-w-md space-y-8">
       <div className="text-center">
         <h2 className="text-3xl font-bold text-gray-900">Sign in to your account</h2>
-        <p className="mt-2 text-sm text-gray-600">
+        <p className="mt-2 text-sm text-gray-700">
           Or{' '}
-          <Link href="/signup" className="font-medium text-blue-600 hover:text-blue-500">
+          <Link href="/signup" className="font-semibold text-blue-600 hover:text-blue-500">
             create a new account
           </Link>
         </p>
@@ -59,7 +57,7 @@ export const LoginForm = () => {
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+          <div className="bg-red-50 border-2 border-red-300 text-red-800 px-4 py-3 rounded-md text-sm font-medium">
             {error}
           </div>
         )}
@@ -104,13 +102,13 @@ export const LoginForm = () => {
               type="checkbox"
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
-            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+            <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 font-medium">
               Remember me
             </label>
           </div>
 
           <div className="text-sm">
-            <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
+            <a href="#" className="font-semibold text-blue-600 hover:text-blue-500">
               Forgot your password?
             </a>
           </div>
