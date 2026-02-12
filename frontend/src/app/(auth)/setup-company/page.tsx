@@ -41,14 +41,14 @@ export default function SetupCompanyPage() {
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h2 className="text-3xl font-bold text-gray-900">Set Up Your Company</h2>
-          <p className="mt-2 text-sm text-gray-600">
+          <p className="mt-2 text-sm text-gray-700 font-medium">
             Create your company profile to get started
           </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+            <div className="bg-red-50 border-2 border-red-300 text-red-800 px-4 py-3 rounded-md text-sm font-medium">
               {error}
             </div>
           )}
