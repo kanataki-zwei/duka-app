@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import auth
+from app.api.v1 import auth, product_categories, products, product_variants
 
 # Create FastAPI app
 app = FastAPI(
@@ -21,6 +21,9 @@ app.add_middleware(
 
 # Include routers
 app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["Authentication"])
+app.include_router(product_categories.router, prefix=f"{settings.API_V1_PREFIX}/product-categories", tags=["Product Categories"])
+app.include_router(products.router, prefix=f"{settings.API_V1_PREFIX}/products", tags=["Products"])
+app.include_router(product_variants.router, prefix=f"{settings.API_V1_PREFIX}/product-variants", tags=["Product Variants"])
 
 @app.get("/")
 async def root():
