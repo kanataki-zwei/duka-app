@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.v1 import auth, product_categories, products, product_variants
+from app.api.v1 import auth, product_categories, products, product_variants, payment_terms, suppliers
 
 # Create FastAPI app
 app = FastAPI(
@@ -24,6 +24,8 @@ app.include_router(auth.router, prefix=f"{settings.API_V1_PREFIX}/auth", tags=["
 app.include_router(product_categories.router, prefix=f"{settings.API_V1_PREFIX}/product-categories", tags=["Product Categories"])
 app.include_router(products.router, prefix=f"{settings.API_V1_PREFIX}/products", tags=["Products"])
 app.include_router(product_variants.router, prefix=f"{settings.API_V1_PREFIX}/product-variants", tags=["Product Variants"])
+app.include_router(payment_terms.router, prefix=f"{settings.API_V1_PREFIX}/payment-terms", tags=["Payment Terms"])
+app.include_router(suppliers.router, prefix=f"{settings.API_V1_PREFIX}/suppliers", tags=["Suppliers"])
 
 @app.get("/")
 async def root():
