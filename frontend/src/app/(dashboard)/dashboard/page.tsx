@@ -13,7 +13,8 @@ import {
   LogOut,
   Mail,
   Building2,
-  Hash
+  Hash,
+  Truck
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -42,19 +43,19 @@ export default function DashboardPage() {
       isActive: true,
     },
     {
-      name: 'Inventory Tracking',
-      description: 'Track stock levels and movements',
-      icon: Warehouse,
+      name: 'Suppliers',
+      description: 'Manage suppliers and payment terms',
+      icon: Truck,
       color: 'bg-green-500',
       lightColor: 'bg-green-50',
       textColor: 'text-green-600',
-      href: '#',
-      isActive: false,
+      href: '/suppliers/payment-terms',
+      isActive: true,
     },
     {
-      name: 'Sales Records',
-      description: 'Record and manage sales transactions',
-      icon: ShoppingCart,
+      name: 'Inventory Tracking',
+      description: 'Track stock levels and movements',
+      icon: Warehouse,
       color: 'bg-purple-500',
       lightColor: 'bg-purple-50',
       textColor: 'text-purple-600',
@@ -62,9 +63,9 @@ export default function DashboardPage() {
       isActive: false,
     },
     {
-      name: 'Client Management',
-      description: 'Manage customer relationships',
-      icon: Users,
+      name: 'Sales Records',
+      description: 'Record and manage sales transactions',
+      icon: ShoppingCart,
       color: 'bg-orange-500',
       lightColor: 'bg-orange-50',
       textColor: 'text-orange-600',
@@ -72,12 +73,22 @@ export default function DashboardPage() {
       isActive: false,
     },
     {
-      name: 'Reports & Analytics',
-      description: 'Generate insights and reports',
-      icon: BarChart3,
+      name: 'Client Management',
+      description: 'Manage customer relationships',
+      icon: Users,
       color: 'bg-pink-500',
       lightColor: 'bg-pink-50',
       textColor: 'text-pink-600',
+      href: '#',
+      isActive: false,
+    },
+    {
+      name: 'Reports & Analytics',
+      description: 'Generate insights and reports',
+      icon: BarChart3,
+      color: 'bg-indigo-500',
+      lightColor: 'bg-indigo-50',
+      textColor: 'text-indigo-600',
       href: '#',
       isActive: false,
     },
@@ -194,7 +205,7 @@ export default function DashboardPage() {
               </p>
             </div>
             <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
-              5 Modules
+              6 Modules
             </div>
           </div>
 
@@ -253,7 +264,7 @@ export default function DashboardPage() {
           </p>
           <div className="grid grid-cols-3 gap-6">
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
-              <p className="text-3xl font-bold">5</p>
+              <p className="text-3xl font-bold">6</p>
               <p className="text-sm text-blue-100">Modules</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-lg p-4">
