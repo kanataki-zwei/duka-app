@@ -3,6 +3,7 @@
 import { useAuthStore } from '@/store/authStore';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { 
   Package, 
   Warehouse, 
@@ -37,6 +38,8 @@ export default function DashboardPage() {
       color: 'bg-blue-500',
       lightColor: 'bg-blue-50',
       textColor: 'text-blue-600',
+      href: '/products/list',
+      isActive: true,
     },
     {
       name: 'Inventory Tracking',
@@ -45,6 +48,8 @@ export default function DashboardPage() {
       color: 'bg-green-500',
       lightColor: 'bg-green-50',
       textColor: 'text-green-600',
+      href: '#',
+      isActive: false,
     },
     {
       name: 'Sales Records',
@@ -53,6 +58,8 @@ export default function DashboardPage() {
       color: 'bg-purple-500',
       lightColor: 'bg-purple-50',
       textColor: 'text-purple-600',
+      href: '#',
+      isActive: false,
     },
     {
       name: 'Client Management',
@@ -61,6 +68,8 @@ export default function DashboardPage() {
       color: 'bg-orange-500',
       lightColor: 'bg-orange-50',
       textColor: 'text-orange-600',
+      href: '#',
+      isActive: false,
     },
     {
       name: 'Reports & Analytics',
@@ -69,6 +78,8 @@ export default function DashboardPage() {
       color: 'bg-pink-500',
       lightColor: 'bg-pink-50',
       textColor: 'text-pink-600',
+      href: '#',
+      isActive: false,
     },
   ];
 
@@ -176,10 +187,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h3 className="text-2xl font-bold text-gray-900">
-                Coming Soon
+                Modules
               </h3>
               <p className="text-gray-600 mt-1">
-                Modules currently in development
+                Manage your business operations
               </p>
             </div>
             <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-semibold">
@@ -190,11 +201,10 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {upcomingModules.map((module) => {
               const Icon = module.icon;
-              return (
-                <div
-                  key={module.name}
-                  className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-lg transition-all hover:-translate-y-1 cursor-pointer group"
-                >
+              const CardContent = (
+                <div className={`bg-white rounded-xl p-6 border border-gray-200 shadow-sm hover:shadow-lg transition-all hover:-translate-y-1 ${
+                  module.isActive ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                } group`}>
                   <div className="flex items-start space-x-4">
                     <div className={`w-12 h-12 ${module.lightColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform`}>
                       <Icon className={`w-6 h-6 ${module.textColor}`} />
@@ -209,17 +219,31 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <div className="mt-4 pt-4 border-t border-gray-100">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                      In Development
+                    <span className={`text-xs font-semibold uppercase tracking-wide ${
+                      module.isActive ? 'text-green-600' : 'text-gray-400'
+                    }`}>
+                      {module.isActive ? 'Available' : 'Coming Soon'}
                     </span>
                   </div>
                 </div>
               );
+
+              // Wrap active modules with Link
+              if (module.isActive) {
+                return (
+                  <Link key={module.name} href={module.href}>
+                    {CardContent}
+                  </Link>
+                );
+              }
+
+              // Return non-active modules without Link
+              return <div key={module.name}>{CardContent}</div>;
             })}
           </div>
         </div>
 
-        {/* Stats Preview (Optional) */}
+        {/* Stats Preview */}
         <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-8 text-white">
           <h3 className="text-2xl font-bold mb-2">
             Ready to get started?
