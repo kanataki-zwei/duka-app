@@ -384,6 +384,14 @@ export default function ProductsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
+                        <Link href={`/products/${product.id}`}>
+                          <button
+                            className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="View Variants"
+                          >
+                            <Package className="w-4 h-4" />
+                          </button>
+                        </Link>
                         <button
                           onClick={() => handleEdit(product)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
