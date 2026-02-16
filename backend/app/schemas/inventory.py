@@ -94,6 +94,13 @@ class InventoryTransactionBase(BaseModel):
     reference_type: Optional[str] = None
     reference_id: Optional[str] = None
     notes: Optional[str] = None
+    # New fields for supplier and payment tracking
+    supplier_id: Optional[str] = None
+    unit_cost: Optional[float] = Field(None, ge=0)
+    total_cost: Optional[float] = Field(None, ge=0)
+    payment_status: Optional[str] = Field(None, pattern="^(unpaid|partial|paid)$")
+    amount_paid: Optional[float] = Field(None, ge=0)
+    amount_due: Optional[float] = Field(None, ge=0)
 
 class InventoryTransactionCreate(InventoryTransactionBase):
     pass
@@ -111,6 +118,7 @@ class InventoryTransactionWithDetails(InventoryTransactionResponse):
     product_variant: Optional[dict] = None
     from_location: Optional[dict] = None
     to_location: Optional[dict] = None
+    supplier: Optional[dict] = None  # Add this line
 
 # ==========================================
 # STOCK ADJUSTMENT SCHEMA (Simplified)

@@ -59,8 +59,8 @@ export default function DashboardPage() {
       color: 'bg-purple-500',
       lightColor: 'bg-purple-50',
       textColor: 'text-purple-600',
-      href: '#',
-      isActive: false,
+      href: '/inventory/locations',
+      isActive: true,
     },
     {
       name: 'Sales Records',
