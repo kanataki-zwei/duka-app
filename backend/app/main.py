@@ -10,7 +10,9 @@ from app.api.v1 import (
     suppliers,
     storage_locations,
     inventory_items,
-    inventory_transactions
+    inventory_transactions,
+    customer_tiers,  # Add this
+    customers  # Add this
 )
 
 # Create FastAPI app
@@ -39,6 +41,8 @@ app.include_router(suppliers.router, prefix=f"{settings.API_V1_PREFIX}/suppliers
 app.include_router(storage_locations.router, prefix=f"{settings.API_V1_PREFIX}/storage-locations", tags=["Storage Locations"])
 app.include_router(inventory_items.router, prefix=f"{settings.API_V1_PREFIX}/inventory-items", tags=["Inventory Items"])
 app.include_router(inventory_transactions.router, prefix=f"{settings.API_V1_PREFIX}/inventory-transactions", tags=["Inventory Transactions"])
+app.include_router(customer_tiers.router, prefix=f"{settings.API_V1_PREFIX}/customer-tiers", tags=["Customer Tiers"])  # Add this
+app.include_router(customers.router, prefix=f"{settings.API_V1_PREFIX}/customers", tags=["Customers"])  # Add this
 
 @app.get("/")
 async def root():
