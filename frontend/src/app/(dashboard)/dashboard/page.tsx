@@ -79,8 +79,8 @@ export default function DashboardPage() {
       color: 'bg-pink-500',
       lightColor: 'bg-pink-50',
       textColor: 'text-pink-600',
-      href: '#',
-      isActive: false,
+      href: '/customers/list',
+      isActive: true,
     },
     {
       name: 'Reports & Analytics',
