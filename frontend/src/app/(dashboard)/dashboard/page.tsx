@@ -89,8 +89,8 @@ export default function DashboardPage() {
       color: 'bg-indigo-500',
       lightColor: 'bg-indigo-50',
       textColor: 'text-indigo-600',
-      href: '#',
-      isActive: false,
+      href: '/analytics',
+      isActive: true,
     },
   ];
 
