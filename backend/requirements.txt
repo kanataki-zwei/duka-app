@@ -24,3 +24,5 @@ passlib[bcrypt]==1.7.4
 
 # JWT tokens
 python-jose[cryptography]==3.3.0
+
+reportlab==4.0.9
