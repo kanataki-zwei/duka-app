@@ -69,8 +69,8 @@ export default function DashboardPage() {
       color: 'bg-orange-500',
       lightColor: 'bg-orange-50',
       textColor: 'text-orange-600',
-      href: '#',
-      isActive: false,
+      href: '/sales',
+      isActive: true,
     },
     {
       name: 'Client Management',
