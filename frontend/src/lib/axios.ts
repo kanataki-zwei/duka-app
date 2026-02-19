@@ -9,12 +9,25 @@ export const apiClient = axios.create({
   },
 });
 
-// Add token to requests if it exists
+// Add token and company ID to every request
 apiClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // Send selected company ID if available
+  const authStorage = localStorage.getItem('auth-storage');
+  if (authStorage) {
+    try {
+      const parsed = JSON.parse(authStorage);
+      const companyId = parsed?.state?.company?.id;
+      if (companyId) {
+        config.headers['X-Company-ID'] = companyId;
+      }
+    } catch {}
+  }
+
   return config;
 });
 
@@ -23,7 +36,6 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
       localStorage.removeItem('access_token');
       localStorage.removeItem('user');
       window.location.href = '/login';

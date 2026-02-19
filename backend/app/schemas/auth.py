@@ -25,6 +25,18 @@ class CompanyResponse(BaseModel):
     name: str
     created_at: datetime
     is_active: bool
+    website: Optional[str] = None
+    address: Optional[str] = None
+    kra_number: Optional[str] = None
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+
+class CompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    website: Optional[str] = None
+    address: Optional[str] = None
+    kra_number: Optional[str] = None
+    description: Optional[str] = None
 
 # Company User Schemas
 class CompanyUserCreate(BaseModel):
