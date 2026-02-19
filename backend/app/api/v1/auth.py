@@ -152,3 +152,34 @@ async def get_me(current_user = Depends(get_current_user)):
         "email": current_user.email,
         "created_at": current_user.created_at
     }
+
+@router.get("/companies", response_model=list[CompanyResponse])
+async def get_user_companies(
+    current_user = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    """Get all companies for the current user"""
+    try:
+        response = supabase.table("company_users")\
+            .select("*, companies(*)")\
+            .eq("user_id", current_user.id)\
+            .eq("is_active", True)\
+            .execute()
+        
+        companies = []
+        if response.data:
+            for item in response.data:
+                company_data = item["companies"]
+                companies.append({
+                    "id": company_data["id"],
+                    "name": company_data["name"],
+                    "created_at": company_data["created_at"],
+                    "is_active": company_data["is_active"]
+                })
+        
+        return companies
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )

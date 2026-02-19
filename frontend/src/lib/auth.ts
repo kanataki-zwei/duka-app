@@ -1,4 +1,4 @@
-import { apiClient } from './axios';
+import { apiClient } from '@/lib/axios';
 import { AuthResponse, LoginRequest, SignupRequest, CompanyCreateRequest, Company } from '@/types';
 
 export const authAPI = {
@@ -21,4 +21,14 @@ export const authAPI = {
     const response = await apiClient.get('/auth/me');
     return response.data;
   },
+};
+
+export const getUserCompanies = async (): Promise<Company[]> => {
+  const response = await apiClient.get('/auth/companies');
+  return response.data;
+};
+
+export const createCompany = async (name: string): Promise<Company> => {
+  const response = await apiClient.post('/auth/company', { name });
+  return response.data;
 };
