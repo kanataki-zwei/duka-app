@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/axios';
-import { AuthResponse, LoginRequest, SignupRequest, CompanyCreateRequest, Company } from '@/types';
+import { AuthResponse, LoginRequest, SignupRequest, CompanyCreateRequest, Company, CompanyUpdateRequest } from '@/types';
 
 export const authAPI = {
   signup: async (data: SignupRequest): Promise<AuthResponse> => {
@@ -30,5 +30,19 @@ export const getUserCompanies = async (): Promise<Company[]> => {
 
 export const createCompany = async (name: string): Promise<Company> => {
   const response = await apiClient.post('/auth/company', { name });
+  return response.data;
+};
+
+export const updateCompany = async (companyId: string, data: CompanyUpdateRequest): Promise<Company> => {
+  const response = await apiClient.put(`/auth/company/${companyId}`, data);
+  return response.data;
+};
+
+export const uploadCompanyLogo = async (companyId: string, file: File): Promise<Company> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await apiClient.post(`/auth/company/${companyId}/logo`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return response.data;
 };

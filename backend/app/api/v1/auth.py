@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from app.schemas.auth import (
-    UserCreate, UserLogin, Token, CompanyCreate, 
-    CompanyResponse, UserResponse
+    UserCreate, UserLogin, Token, CompanyCreate,
+    CompanyResponse, CompanyUpdate, UserResponse
 )
 from app.utils.supabase import get_supabase
 from app.api.deps import get_current_user
 from supabase import Client
 from datetime import datetime
+import uuid
 
 router = APIRouter()
 
@@ -17,7 +18,6 @@ async def signup(
 ):
     """Register a new user"""
     try:
-        # Sign up user with Supabase Auth
         auth_response = supabase.auth.sign_up({
             "email": user_data.email,
             "password": user_data.password
@@ -54,13 +54,11 @@ async def login(
 ):
     """Login user"""
     try:
-        # Sign in with Supabase Auth
         auth_response = supabase.auth.sign_in_with_password({
             "email": user_data.email,
             "password": user_data.password
         })
         
-        # Add detailed logging
         print(f"Auth response: {auth_response}")
         print(f"User: {auth_response.user}")
         print(f"Session: {auth_response.session}")
@@ -74,7 +72,6 @@ async def login(
         user = auth_response.user
         session = auth_response.session
         
-        # Get user's company if exists
         company_response = supabase.table("company_users")\
             .select("*, companies(*)")\
             .eq("user_id", user.id)\
@@ -88,7 +85,12 @@ async def login(
                 "id": company_data["id"],
                 "name": company_data["name"],
                 "created_at": company_data["created_at"],
-                "is_active": company_data["is_active"]
+                "is_active": company_data["is_active"],
+                "website": company_data.get("website"),
+                "address": company_data.get("address"),
+                "kra_number": company_data.get("kra_number"),
+                "description": company_data.get("description"),
+                "logo_url": company_data.get("logo_url"),
             }
         
         return {
@@ -117,7 +119,6 @@ async def create_company(
 ):
     """Create a new company for the current user"""
     try:
-        # Create company
         company_response = supabase.table("companies").insert({
             "name": company_data.name
         }).execute()
@@ -130,7 +131,6 @@ async def create_company(
         
         company = company_response.data[0]
         
-        # Link user to company as owner
         supabase.table("company_users").insert({
             "company_id": company["id"],
             "user_id": current_user.id,
@@ -138,6 +138,111 @@ async def create_company(
         }).execute()
         
         return company
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.put("/company/{company_id}", response_model=CompanyResponse)
+async def update_company(
+    company_id: str,
+    company_data: CompanyUpdate,
+    current_user = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    """Update company details"""
+    try:
+        membership = supabase.table("company_users")\
+            .select("role")\
+            .eq("user_id", current_user.id)\
+            .eq("company_id", company_id)\
+            .eq("is_active", True)\
+            .execute()
+
+        if not membership.data:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this company"
+            )
+
+        update_data = company_data.model_dump(exclude_unset=True)
+        if not update_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No fields to update"
+            )
+
+        response = supabase.table("companies")\
+            .update(update_data)\
+            .eq("id", company_id)\
+            .execute()
+
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Company not found"
+            )
+
+        return response.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.post("/company/{company_id}/logo", response_model=CompanyResponse)
+async def upload_company_logo(
+    company_id: str,
+    file: UploadFile = File(...),
+    current_user = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    """Upload company logo"""
+    try:
+        membership = supabase.table("company_users")\
+            .select("role")\
+            .eq("user_id", current_user.id)\
+            .eq("company_id", company_id)\
+            .eq("is_active", True)\
+            .execute()
+
+        if not membership.data:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this company"
+            )
+
+        if file.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only JPEG, PNG, and WebP images are allowed"
+            )
+
+        ext = file.filename.split(".")[-1]
+        filename = f"{company_id}/{uuid.uuid4()}.{ext}"
+
+        contents = await file.read()
+        supabase.storage.from_("company-logos").upload(
+            filename,
+            contents,
+            {"content-type": file.content_type}
+        )
+
+        logo_url = supabase.storage.from_("company-logos").get_public_url(filename)
+
+        response = supabase.table("companies")\
+            .update({"logo_url": logo_url})\
+            .eq("id", company_id)\
+            .execute()
+
+        return response.data[0]
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -174,7 +279,12 @@ async def get_user_companies(
                     "id": company_data["id"],
                     "name": company_data["name"],
                     "created_at": company_data["created_at"],
-                    "is_active": company_data["is_active"]
+                    "is_active": company_data["is_active"],
+                    "website": company_data.get("website"),
+                    "address": company_data.get("address"),
+                    "kra_number": company_data.get("kra_number"),
+                    "description": company_data.get("description"),
+                    "logo_url": company_data.get("logo_url"),
                 })
         
         return companies

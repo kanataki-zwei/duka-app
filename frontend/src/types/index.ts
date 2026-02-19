@@ -9,6 +9,19 @@ export interface Company {
   name: string;
   created_at: string;
   is_active: boolean;
+  website?: string | null;
+  address?: string | null;
+  kra_number?: string | null;
+  description?: string | null;
+  logo_url?: string | null;
+}
+
+export interface CompanyUpdateRequest {
+  name?: string;
+  website?: string;
+  address?: string;
+  kra_number?: string;
+  description?: string;
 }
 
 export interface AuthResponse {

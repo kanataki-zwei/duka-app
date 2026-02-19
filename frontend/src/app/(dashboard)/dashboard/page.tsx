@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { user } = useAuthStore();
+  const { user, company } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
@@ -88,13 +88,24 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">
-            Welcome back! 👋
-          </h2>
-          <p className="text-gray-600">
-            Here's what's happening with your business today.
-          </p>
+        <div className="mb-8 flex items-center space-x-4">
+          {company?.logo_url && (
+            <div className="w-14 h-14 rounded-xl overflow-hidden border border-gray-200 shadow-sm flex-shrink-0 bg-white">
+              <img
+                src={company.logo_url}
+                alt={company.name}
+                className="w-full h-full object-contain p-1"
+              />
+            </div>
+          )}
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-1">
+              Welcome back! 👋
+            </h2>
+            <p className="text-gray-600">
+              Here's what's happening with {company?.name || 'your business'} today.
+            </p>
+          </div>
         </div>
 
         {/* Modules */}
