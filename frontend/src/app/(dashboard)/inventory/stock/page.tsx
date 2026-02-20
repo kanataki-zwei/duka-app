@@ -4,15 +4,15 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { 
-  inventoryItemsAPI, 
+import {
+  inventoryItemsAPI,
   storageLocationsAPI,
   InventoryItemWithDetails,
-  StorageLocation 
+  StorageLocation
 } from '@/lib/inventory';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Package, AlertTriangle, Filter, Plus } from 'lucide-react';
+import { Package, AlertTriangle, Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function InventoryStockPage() {
@@ -21,7 +21,10 @@ export default function InventoryStockPage() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItemWithDetails[]>([]);
   const [locations, setLocations] = useState<StorageLocation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filters
   const [filterLocation, setFilterLocation] = useState<string>('');
+  const [searchProduct, setSearchProduct] = useState<string>('');
   const [showLowStock, setShowLowStock] = useState(false);
 
   useEffect(() => {
@@ -29,36 +32,38 @@ export default function InventoryStockPage() {
       router.push('/login');
       return;
     }
-    loadData();
+    loadLocations();
   }, [user, router]);
 
-  const loadData = async () => {
+  useEffect(() => {
+    if (user) {
+      loadItems();
+    }
+  }, [showLowStock, filterLocation]);
+
+  const loadLocations = async () => {
+    try {
+      const locationsData = await storageLocationsAPI.getAll();
+      setLocations(locationsData);
+      loadItems();
+    } catch (error: any) {
+      toast.error('Failed to load locations');
+    }
+  };
+
+  const loadItems = async () => {
     try {
       setIsLoading(true);
-      const [itemsData, locationsData] = await Promise.all([
-        inventoryItemsAPI.getAll({ low_stock: showLowStock }),
-        storageLocationsAPI.getAll(),
-      ]);
+      const params: any = { low_stock: showLowStock || undefined };
+      if (filterLocation) params.storage_location_id = filterLocation;
+      const itemsData = await inventoryItemsAPI.getAll(params);
       setInventoryItems(itemsData);
-      setLocations(locationsData);
     } catch (error: any) {
       toast.error('Failed to load inventory data');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (user) {
-      loadData();
-    }
-  }, [showLowStock]);
-
-  const filteredItems = inventoryItems.filter(item => {
-    if (!filterLocation) return true;
-    return item.storage_location_id === filterLocation;
-  });
 
   const isLowStock = (item: InventoryItemWithDetails) => {
     if (!item.min_stock_level) return false;
@@ -76,9 +81,16 @@ export default function InventoryStockPage() {
     return `${item.product_variant.products.name} - ${item.product_variant.variant_name}`;
   };
 
-  if (!user) {
-    return null;
-  }
+  // Client-side product name filter
+  const filteredItems = inventoryItems.filter(item => {
+    if (!searchProduct) return true;
+    const search = searchProduct.toLowerCase();
+    const productName = item.product_variant?.products?.name?.toLowerCase() || '';
+    const variantName = item.product_variant?.variant_name?.toLowerCase() || '';
+    return productName.includes(search) || variantName.includes(search);
+  });
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -97,9 +109,7 @@ export default function InventoryStockPage() {
             </div>
             <div className="flex items-center space-x-3">
               <Link href="/inventory/locations">
-                <Button variant="outline">
-                  Manage Locations
-                </Button>
+                <Button variant="outline">Manage Locations</Button>
               </Link>
               <Link href="/inventory/transactions">
                 <Button className="flex items-center space-x-2">
@@ -112,38 +122,55 @@ export default function InventoryStockPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Product Search */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Search Product</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by product or variant..."
+                  value={searchProduct}
+                  onChange={(e) => setSearchProduct(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+            </div>
+
+            {/* Location Filter */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Location</label>
               <select
                 value={filterLocation}
                 onChange={(e) => setFilterLocation(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               >
                 <option value="">All Locations</option>
                 {locations.map(location => (
-                  <option key={location.id} value={location.id}>
-                    {location.name}
-                  </option>
+                  <option key={location.id} value={location.id}>{location.name}</option>
                 ))}
               </select>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="low-stock"
-                checked={showLowStock}
-                onChange={(e) => setShowLowStock(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-              />
-              <label htmlFor="low-stock" className="text-sm font-medium text-gray-900 cursor-pointer">
-                Show only low stock items
-              </label>
+            {/* Low Stock Toggle */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Stock Status</label>
+              <div className="flex items-center space-x-2 py-2">
+                <input
+                  type="checkbox"
+                  id="low-stock"
+                  checked={showLowStock}
+                  onChange={(e) => setShowLowStock(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="low-stock" className="text-sm font-medium text-gray-900 cursor-pointer">
+                  Show only low stock items
+                </label>
+              </div>
             </div>
           </div>
         </div>
@@ -159,7 +186,6 @@ export default function InventoryStockPage() {
               <Package className="w-10 h-10 text-blue-600" />
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -171,7 +197,6 @@ export default function InventoryStockPage() {
               <AlertTriangle className="w-10 h-10 text-orange-600" />
             </div>
           </div>
-
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between">
               <div>
@@ -196,7 +221,9 @@ export default function InventoryStockPage() {
             <div className="p-8 text-center">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-3" />
               <p className="text-gray-600">
-                {showLowStock ? 'No low stock items found' : 'No inventory items yet. Add stock to get started!'}
+                {showLowStock || searchProduct || filterLocation
+                  ? 'No items match your filters'
+                  : 'No inventory items yet. Add stock to get started!'}
               </p>
             </div>
           ) : (
@@ -215,9 +242,7 @@ export default function InventoryStockPage() {
               <TableBody>
                 {filteredItems.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="font-semibold">
-                      {getProductName(item)}
-                    </TableCell>
+                    <TableCell className="font-semibold">{getProductName(item)}</TableCell>
                     <TableCell className="text-gray-600 font-mono text-sm">
                       {item.product_variant?.sku || '-'}
                     </TableCell>

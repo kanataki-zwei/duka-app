@@ -12,79 +12,14 @@ from supabase import Client
 
 router = APIRouter()
 
-@router.post("/", response_model=InventoryItemResponse, status_code=status.HTTP_201_CREATED)
-async def create_inventory_item(
-    item_data: InventoryItemCreate,
-    current_user = Depends(get_current_user),
-    company = Depends(get_current_company),
-    supabase: Client = Depends(get_supabase)
-):
-    """Create a new inventory item"""
-    try:
-        # Verify variant exists
-        variant_response = supabase.table("product_variants")\
-            .select("id")\
-            .eq("id", item_data.product_variant_id)\
-            .eq("company_id", company["id"])\
-            .execute()
-        
-        if not variant_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Product variant not found"
-            )
-        
-        # Verify location exists
-        location_response = supabase.table("storage_locations")\
-            .select("id")\
-            .eq("id", item_data.storage_location_id)\
-            .eq("company_id", company["id"])\
-            .execute()
-        
-        if not location_response.data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Storage location not found"
-            )
-        
-        # Create inventory item
-        response = supabase.table("inventory_items").insert({
-            "company_id": company["id"],
-            "product_variant_id": item_data.product_variant_id,
-            "storage_location_id": item_data.storage_location_id,
-            "quantity": item_data.quantity,
-            "min_stock_level": item_data.min_stock_level,
-            "max_stock_level": item_data.max_stock_level
-        }).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Failed to create inventory item"
-            )
-        
-        return response.data[0]
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        if "unique_variant_per_location" in str(e):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This variant already has inventory at this location"
-            )
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
-
 @router.get("/", response_model=List[InventoryItemWithDetails])
 async def get_inventory_items(
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase),
     storage_location_id: Optional[str] = Query(None, description="Filter by storage location"),
-    low_stock: Optional[bool] = Query(None, description="Show only low stock items")
+    low_stock: Optional[bool] = Query(None, description="Show only low stock items"),
+    product_name: Optional[str] = Query(None, description="Search by product name")
 ):
     """Get all inventory items for the company"""
     try:
@@ -100,15 +35,71 @@ async def get_inventory_items(
         
         items = []
         for item in response.data:
-            # Extract nested data
             variant_data = item.pop("product_variants", None)
             location_data = item.pop("storage_locations", None)
             
-            # Add to item
             item["product_variant"] = variant_data
             item["storage_location"] = location_data
             
-            # Filter low stock if requested
+            # Apply product name filter in Python since it's a nested field
+            if product_name:
+                name = variant_data.get("products", {}).get("name", "") if variant_data else ""
+                variant_name = variant_data.get("variant_name", "") if variant_data else ""
+                search = product_name.lower()
+                if search not in name.lower() and search not in variant_name.lower():
+                    continue
+            
+            if low_stock:
+                if item.get("min_stock_level") and item["quantity"] <= item["min_stock_level"]:
+                    items.append(item)
+            else:
+                items.append(item)
+        
+        return items
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.get("/", response_model=List[InventoryItemWithDetails])
+async def get_inventory_items(
+    current_user = Depends(get_current_user),
+    company = Depends(get_current_company),
+    supabase: Client = Depends(get_supabase),
+    storage_location_id: Optional[str] = Query(None, description="Filter by storage location"),
+    low_stock: Optional[bool] = Query(None, description="Show only low stock items"),
+    product_name: Optional[str] = Query(None, description="Search by product name")
+):
+    """Get all inventory items for the company"""
+    try:
+        query = supabase.table("inventory_items")\
+            .select("*, product_variants(id, variant_name, sku, product_id, products(id, name)), storage_locations(id, name, location_type)")\
+            .eq("company_id", company["id"])\
+            .order("created_at", desc=True)
+        
+        if storage_location_id:
+            query = query.eq("storage_location_id", storage_location_id)
+        
+        response = query.execute()
+        
+        items = []
+        for item in response.data:
+            variant_data = item.pop("product_variants", None)
+            location_data = item.pop("storage_locations", None)
+            
+            item["product_variant"] = variant_data
+            item["storage_location"] = location_data
+            
+            # Apply product name filter in Python since it's a nested field
+            if product_name:
+                name = variant_data.get("products", {}).get("name", "") if variant_data else ""
+                variant_name = variant_data.get("variant_name", "") if variant_data else ""
+                search = product_name.lower()
+                if search not in name.lower() and search not in variant_name.lower():
+                    continue
+            
             if low_stock:
                 if item.get("min_stock_level") and item["quantity"] <= item["min_stock_level"]:
                     items.append(item)

@@ -67,9 +67,7 @@ async def create_inventory_transaction(
 ):
     """Create a new inventory transaction and update stock levels"""
     try:
-        # DEBUG: Print what we received
-        print(f"DEBUG: Received payment_status = {transaction_data.payment_status}")
-        print(f"DEBUG: Received amount_paid = {transaction_data.amount_paid}")
+        
         # Verify variant exists
         variant_response = supabase.table("product_variants")\
             .select("id")\
