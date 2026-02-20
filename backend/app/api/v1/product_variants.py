@@ -11,6 +11,21 @@ from supabase import Client
 
 router = APIRouter()
 
+@router.get("/generate-sku", response_model=dict)
+async def get_generated_variant_sku(
+    current_user = Depends(get_current_user),
+    company = Depends(get_current_company),
+    supabase: Client = Depends(get_supabase)
+):
+    """Generate a serial SKU for a new variant"""
+    response = supabase.table("product_variants")\
+        .select("id")\
+        .eq("company_id", company["id"])\
+        .execute()
+    count = len(response.data) + 1 if response.data else 1
+    sku = f"VAR-{count:04d}"
+    return {"sku": sku}
+
 @router.post("/", response_model=ProductVariantResponse, status_code=status.HTTP_201_CREATED)
 async def create_product_variant(
     variant_data: ProductVariantCreate,

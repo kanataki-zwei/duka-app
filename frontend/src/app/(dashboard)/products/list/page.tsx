@@ -4,17 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { 
-  productsAPI, 
-  productCategoriesAPI, 
-  Product, 
-  ProductCategory, 
-  ProductCreateRequest 
+import {
+  productsAPI,
+  productCategoriesAPI,
+  Product,
+  ProductCategory,
+  ProductCreateRequest
 } from '@/lib/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, Package, Search, Filter } from 'lucide-react';
+import { Plus, Edit2, Trash2, Package, Search, Filter, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProductsPage() {
@@ -27,17 +27,13 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState<string>('');
+  const [generatingSku, setGeneratingSku] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState<ProductCreateRequest>({
     category_id: '',
     name: '',
     description: '',
     sku: '',
-    avg_buying_price: undefined,
-    avg_selling_price: undefined,
-    min_stock_level: undefined,
-    reorder_quantity: undefined,
   });
 
   useEffect(() => {
@@ -59,28 +55,34 @@ export default function ProductsPage() {
       setCategories(categoriesData);
     } catch (error: any) {
       toast.error('Failed to load data');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleGenerateSku = async () => {
+    setGeneratingSku(true);
+    try {
+      const sku = await productsAPI.generateSku();
+      setFormData((prev) => ({ ...prev, sku }));
+    } catch {
+      toast.error('Failed to generate SKU');
+    } finally {
+      setGeneratingSku(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       if (editingProduct) {
         await productsAPI.update(editingProduct.id, formData);
         toast.success('Product updated successfully');
       } else {
         await productsAPI.create(formData);
-        toast.success('Product created successfully');
+        toast.success('Product created with default Standard variant');
       }
-      
-      // Reset form
       resetForm();
-      
-      // Reload products
       loadData();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to save product');
@@ -94,19 +96,12 @@ export default function ProductsPage() {
       name: product.name,
       description: product.description || '',
       sku: product.sku || '',
-      avg_buying_price: product.avg_buying_price || undefined,
-      avg_selling_price: product.avg_selling_price || undefined,
-      min_stock_level: product.min_stock_level || undefined,
-      reorder_quantity: product.reorder_quantity || undefined,
     });
     setShowCreateForm(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this product?')) {
-      return;
-    }
-
+    if (!confirm('Are you sure you want to delete this product?')) return;
     try {
       await productsAPI.delete(id);
       toast.success('Product deleted successfully');
@@ -119,34 +114,21 @@ export default function ProductsPage() {
   const resetForm = () => {
     setShowCreateForm(false);
     setEditingProduct(null);
-    setFormData({
-      category_id: '',
-      name: '',
-      description: '',
-      sku: '',
-      avg_buying_price: undefined,
-      avg_selling_price: undefined,
-      min_stock_level: undefined,
-      reorder_quantity: undefined,
-    });
+    setFormData({ category_id: '', name: '', description: '', sku: '' });
   };
 
-  // Filter products based on search and category
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+      (product.sku && product.sku.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = !filterCategory || product.category_id === filterCategory;
     return matchesSearch && matchesCategory;
   });
 
   const getCategoryName = (categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId);
-    return category?.name || 'Unknown';
+    return categories.find(c => c.id === categoryId)?.name || 'Unknown';
   };
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -165,14 +147,9 @@ export default function ProductsPage() {
             </div>
             <div className="flex items-center space-x-3">
               <Link href="/products/categories">
-                <Button variant="outline">
-                  Manage Categories
-                </Button>
+                <Button variant="outline">Manage Categories</Button>
               </Link>
-              <Button
-                onClick={() => setShowCreateForm(true)}
-                className="flex items-center space-x-2"
-              >
+              <Button onClick={() => setShowCreateForm(true)} className="flex items-center space-x-2">
                 <Plus className="w-4 h-4" />
                 <span>Add Product</span>
               </Button>
@@ -181,7 +158,6 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create/Edit Form */}
         {showCreateForm && (
@@ -218,58 +194,30 @@ export default function ProductsPage() {
                   required
                 />
 
-                <Input
-                  label="SKU (Optional)"
-                  value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                  placeholder="e.g., MBP-14-2024"
-                />
-
-                <Input
-                  label="Average Buying Price"
-                  type="number"
-                  step="0.01"
-                  value={formData.avg_buying_price || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    avg_buying_price: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
-                  placeholder="0.00"
-                />
-
-                <Input
-                  label="Average Selling Price"
-                  type="number"
-                  step="0.01"
-                  value={formData.avg_selling_price || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    avg_selling_price: e.target.value ? parseFloat(e.target.value) : undefined 
-                  })}
-                  placeholder="0.00"
-                />
-
-                <Input
-                  label="Minimum Stock Level"
-                  type="number"
-                  value={formData.min_stock_level || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    min_stock_level: e.target.value ? parseInt(e.target.value) : undefined 
-                  })}
-                  placeholder="0"
-                />
-
-                <Input
-                  label="Reorder Quantity"
-                  type="number"
-                  value={formData.reorder_quantity || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    reorder_quantity: e.target.value ? parseInt(e.target.value) : undefined 
-                  })}
-                  placeholder="0"
-                />
+                {/* SKU with Generate button */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    SKU (Optional)
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={formData.sku}
+                      onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                      placeholder="e.g., MBP-14-2024"
+                      className="flex-1 px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateSku}
+                      disabled={generatingSku}
+                      className="flex items-center space-x-1.5 px-3 py-2 text-sm font-medium bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50 whitespace-nowrap border-2 border-purple-200"
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      <span>{generatingSku ? 'Generating...' : 'Generate'}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <div>
@@ -349,8 +297,9 @@ export default function ProductsPage() {
                   <TableHead>Product Name</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Buying Price</TableHead>
-                  <TableHead>Selling Price</TableHead>
+                  <TableHead>Variants</TableHead>
+                  <TableHead>Avg. Buying</TableHead>
+                  <TableHead>Avg. Selling</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -367,17 +316,20 @@ export default function ProductsPage() {
                         {getCategoryName(product.category_id)}
                       </span>
                     </TableCell>
+                    <TableCell>
+                      <span className="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-semibold rounded-full">
+                        {product.variant_count} {product.variant_count === 1 ? 'variant' : 'variants'}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-gray-900">
-                      {product.avg_buying_price ? `KES ${product.avg_buying_price.toLocaleString()}` : '-'}
+                      {product.avg_buying_price ? `KES ${Number(product.avg_buying_price).toLocaleString()}` : '-'}
                     </TableCell>
                     <TableCell className="text-gray-900 font-semibold">
-                      {product.avg_selling_price ? `KES ${product.avg_selling_price.toLocaleString()}` : '-'}
+                      {product.avg_selling_price ? `KES ${Number(product.avg_selling_price).toLocaleString()}` : '-'}
                     </TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        product.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
+                        product.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                       }`}>
                         {product.is_active ? 'Active' : 'Inactive'}
                       </span>
