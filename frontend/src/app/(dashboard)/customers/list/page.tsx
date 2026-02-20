@@ -4,20 +4,19 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { 
-  customersAPI, 
+import {
+  customersAPI,
   customerTiersAPI,
-  CustomerWithDetails, 
-  CustomerType, 
+  CustomerWithDetails,
+  CustomerType,
   CustomerStatus,
-  CustomerCreateRequest,
   CustomerTier
 } from '@/lib/customers';
 import { paymentTermsAPI, PaymentTerm } from '@/lib/suppliers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, Users, Award, Building2, User, ShoppingCart, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, Award, Building2, User, ShoppingCart, AlertTriangle, Search, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function CustomersListPage() {
@@ -31,10 +30,10 @@ export default function CustomersListPage() {
   const [editingCustomer, setEditingCustomer] = useState<CustomerWithDetails | null>(null);
 
   // Filters
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
 
-  // Form state
   const [formData, setFormData] = useState<any>({
     customer_type: CustomerType.INDIVIDUAL,
     name: '',
@@ -70,7 +69,6 @@ export default function CustomersListPage() {
       setPaymentTerms(termsData);
     } catch (error: any) {
       toast.error('Failed to load data');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +76,6 @@ export default function CustomersListPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       const payload: any = {
         customer_type: formData.customer_type,
@@ -102,7 +99,7 @@ export default function CustomersListPage() {
         await customersAPI.create(payload);
         toast.success('Customer created successfully');
       }
-      
+
       resetForm();
       loadData();
     } catch (error: any) {
@@ -129,10 +126,7 @@ export default function CustomersListPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to deactivate this customer?')) {
-      return;
-    }
-
+    if (!confirm('Are you sure you want to deactivate this customer?')) return;
     try {
       await customersAPI.delete(id);
       toast.success('Customer deactivated successfully');
@@ -162,50 +156,44 @@ export default function CustomersListPage() {
 
   const getCustomerTypeIcon = (type: string) => {
     switch (type) {
-      case 'business':
-        return <Building2 className="w-4 h-4" />;
-      case 'walk-in':
-        return <ShoppingCart className="w-4 h-4" />;
-      default:
-        return <User className="w-4 h-4" />;
+      case 'business': return <Building2 className="w-4 h-4" />;
+      case 'walk-in': return <ShoppingCart className="w-4 h-4" />;
+      default: return <User className="w-4 h-4" />;
     }
   };
 
   const getCustomerTypeColor = (type: string) => {
     switch (type) {
-      case 'business':
-        return 'bg-purple-100 text-purple-800';
-      case 'walk-in':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-blue-100 text-blue-800';
+      case 'business': return 'bg-purple-100 text-purple-800';
+      case 'walk-in': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-blue-100 text-blue-800';
     }
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800';
-      case 'suspended':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'active': return 'bg-green-100 text-green-800';
+      case 'suspended': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
-
-  const filteredCustomers = customers.filter(customer => {
-    if (filterType && customer.customer_type !== filterType) return false;
-    if (filterStatus && customer.status !== filterStatus) return false;
-    return true;
-  });
 
   const isOverCreditLimit = (customer: CustomerWithDetails) => {
     return customer.current_balance > customer.credit_limit && customer.credit_limit > 0;
   };
 
-  if (!user) {
-    return null;
-  }
+  // Only show active tiers in the form
+  const activeTiers = tiers.filter(t => t.is_active);
+
+  const filteredCustomers = customers.filter(customer => {
+    const matchesSearch = !searchTerm ||
+      customer.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesType = !filterType || customer.customer_type === filterType;
+    const matchesStatus = !filterStatus || customer.status === filterStatus;
+    return matchesSearch && matchesType && matchesStatus;
+  });
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -229,10 +217,7 @@ export default function CustomersListPage() {
                   Manage Tiers
                 </Button>
               </Link>
-              <Button
-                onClick={() => setShowCreateForm(true)}
-                className="flex items-center space-x-2"
-              >
+              <Button onClick={() => setShowCreateForm(true)} className="flex items-center space-x-2">
                 <Plus className="w-4 h-4" />
                 <span>Add Customer</span>
               </Button>
@@ -241,7 +226,6 @@ export default function CustomersListPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create/Edit Form */}
         {showCreateForm && (
@@ -250,7 +234,6 @@ export default function CustomersListPage() {
               {editingCustomer ? 'Edit Customer' : 'Create New Customer'}
             </h2>
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Basic Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -293,12 +276,9 @@ export default function CustomersListPage() {
                 />
               </div>
 
-              {/* Address and Tax ID */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Address
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">Address</label>
                   <textarea
                     value={formData.address}
                     onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -307,7 +287,6 @@ export default function CustomersListPage() {
                     className="w-full px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-
                 <div className="space-y-4">
                   {formData.customer_type === CustomerType.BUSINESS && (
                     <Input
@@ -320,14 +299,11 @@ export default function CustomersListPage() {
                 </div>
               </div>
 
-              {/* Financial Info */}
               <div className="border-t pt-4">
                 <h3 className="text-md font-semibold text-gray-900 mb-3">Financial Information</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Payment Terms
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Payment Terms</label>
                     <select
                       value={formData.payment_term_id}
                       onChange={(e) => setFormData({ ...formData, payment_term_id: e.target.value })}
@@ -335,24 +311,20 @@ export default function CustomersListPage() {
                     >
                       <option value="">Select payment terms</option>
                       {paymentTerms.map(term => (
-                        <option key={term.id} value={term.id}>
-                          {term.name}
-                        </option>
+                        <option key={term.id} value={term.id}>{term.name}</option>
                       ))}
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Customer Tier
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Customer Tier</label>
                     <select
                       value={formData.customer_tier_id}
                       onChange={(e) => setFormData({ ...formData, customer_tier_id: e.target.value })}
                       className="w-full px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Select tier (optional)</option>
-                      {tiers.map(tier => (
+                      {activeTiers.map(tier => (
                         <option key={tier.id} value={tier.id}>
                           {tier.name} ({tier.discount_percentage}% discount)
                         </option>
@@ -371,9 +343,7 @@ export default function CustomersListPage() {
                   />
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-900 mb-2">
-                      Status
-                    </label>
+                    <label className="block text-sm font-semibold text-gray-900 mb-2">Status</label>
                     <select
                       value={formData.status}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value as CustomerStatus })}
@@ -387,11 +357,8 @@ export default function CustomersListPage() {
                 </div>
               </div>
 
-              {/* Notes */}
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Notes (Optional)
-                </label>
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Notes (Optional)</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -415,38 +382,37 @@ export default function CustomersListPage() {
 
         {/* Filters */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Customer Type
-              </label>
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Types</option>
-                <option value={CustomerType.INDIVIDUAL}>Individual</option>
-                <option value={CustomerType.BUSINESS}>Business</option>
-                <option value={CustomerType.WALK_IN}>Walk-In</option>
-              </select>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search by name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+              />
             </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Status
-              </label>
-              <select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">All Statuses</option>
-                <option value={CustomerStatus.ACTIVE}>Active</option>
-                <option value={CustomerStatus.INACTIVE}>Inactive</option>
-                <option value={CustomerStatus.SUSPENDED}>Suspended</option>
-              </select>
-            </div>
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+            >
+              <option value="">All Types</option>
+              <option value={CustomerType.INDIVIDUAL}>Individual</option>
+              <option value={CustomerType.BUSINESS}>Business</option>
+              <option value={CustomerType.WALK_IN}>Walk-In</option>
+            </select>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Statuses</option>
+              <option value={CustomerStatus.ACTIVE}>Active</option>
+              <option value={CustomerStatus.INACTIVE}>Inactive</option>
+              <option value={CustomerStatus.SUSPENDED}>Suspended</option>
+            </select>
           </div>
         </div>
 
@@ -460,7 +426,11 @@ export default function CustomersListPage() {
           ) : filteredCustomers.length === 0 ? (
             <div className="p-8 text-center">
               <Users className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">No customers found. Create your first customer!</p>
+              <p className="text-gray-600">
+                {searchTerm || filterType || filterStatus
+                  ? 'No customers match your filters'
+                  : 'No customers yet. Create your first customer!'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -509,11 +479,11 @@ export default function CustomersListPage() {
                         ) : '-'}
                       </TableCell>
                       <TableCell className="font-semibold">
-                        KES {customer.credit_limit.toLocaleString()}
+                        KES {customer.credit_limit.toLocaleString('en-KE')}
                       </TableCell>
                       <TableCell>
                         <div className="font-semibold">
-                          KES {customer.current_balance.toLocaleString()}
+                          KES {customer.current_balance.toLocaleString('en-KE')}
                         </div>
                         {isOverCreditLimit(customer) && (
                           <div className="flex items-center space-x-1 text-xs text-red-600 mt-1">
@@ -529,6 +499,14 @@ export default function CustomersListPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end space-x-2">
+                          <Link href={`/customers/${customer.id}`}>
+                            <button
+                              className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                              title="View Profile"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                          </Link>
                           <button
                             onClick={() => handleEdit(customer)}
                             className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
