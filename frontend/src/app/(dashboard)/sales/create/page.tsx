@@ -1,21 +1,23 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { salesAPI, SaleCreateRequest, SaleItemCreateRequest } from '@/lib/sales';
+import { salesAPI, SaleCreateRequest } from '@/lib/sales';
 import { customersAPI, CustomerWithDetails } from '@/lib/customers';
 import { storageLocationsAPI, StorageLocation, productVariantsAPI } from '@/lib/inventory';
 import { ProductVariant } from '@/lib/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Plus, Trash2, ShoppingCart, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, ShoppingCart, AlertCircle, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface LineItem {
   id: string;
   product_variant_id: string;
+  variantSearch: string;
+  showDropdown: boolean;
   quantity: number;
   unit_price: number;
 }
@@ -29,15 +31,16 @@ export default function CreateInvoicePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
-  const [customerId, setCustomerId] = useState('');
+  // Customer search
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithDetails | null>(null);
+  const customerSearchRef = useRef<HTMLDivElement>(null);
+
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [locationId, setLocationId] = useState('');
   const [notes, setNotes] = useState('');
   const [lineItems, setLineItems] = useState<LineItem[]>([]);
-
-  // Selected customer details
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithDetails | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -46,6 +49,17 @@ export default function CreateInvoicePage() {
     }
     loadData();
   }, [user, router]);
+
+  // Close customer dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (customerSearchRef.current && !customerSearchRef.current.contains(e.target as Node)) {
+        setShowCustomerDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const loadData = async () => {
     try {
@@ -60,28 +74,41 @@ export default function CreateInvoicePage() {
       setVariants(variantsData);
     } catch (error: any) {
       toast.error('Failed to load data');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCustomerChange = (customerId: string) => {
-    setCustomerId(customerId);
-    const customer = customers.find(c => c.id === customerId);
-    setSelectedCustomer(customer || null);
+  const filteredCustomers = customers.filter(c => {
+    const query = customerSearch.toLowerCase();
+    return c.name.toLowerCase().includes(query) ||
+      c.email?.toLowerCase().includes(query) ||
+      c.phone?.includes(query);
+  });
+
+  const handleCustomerSelect = (customer: CustomerWithDetails) => {
+    setSelectedCustomer(customer);
+    setCustomerSearch(customer.name);
+    setShowCustomerDropdown(false);
+  };
+
+  const getFilteredVariants = (search: string) => {
+    return variants.filter(v => {
+      const query = search.toLowerCase();
+      return v.variant_name.toLowerCase().includes(query) ||
+        v.sku?.toLowerCase().includes(query);
+    });
   };
 
   const addLineItem = () => {
-    setLineItems([
-      ...lineItems,
-      {
-        id: Math.random().toString(36).substr(2, 9),
-        product_variant_id: '',
-        quantity: 1,
-        unit_price: 0,
-      },
-    ]);
+    setLineItems([...lineItems, {
+      id: Math.random().toString(36).substr(2, 9),
+      product_variant_id: '',
+      variantSearch: '',
+      showDropdown: false,
+      quantity: 1,
+      unit_price: 0,
+    }]);
   };
 
   const removeLineItem = (id: string) => {
@@ -89,27 +116,24 @@ export default function CreateInvoicePage() {
   };
 
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
+    setLineItems(lineItems.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleVariantSelect = (lineId: string, variant: ProductVariant) => {
     setLineItems(lineItems.map(item => {
-      if (item.id === id) {
-        const updated = { ...item, [field]: value };
-        
-        // Auto-fill unit price when variant is selected
-        if (field === 'product_variant_id' && value) {
-          const variant = variants.find(v => v.id === value);
-          if (variant?.selling_price) {
-            updated.unit_price = variant.selling_price;
-          }
-        }
-        
-        return updated;
-      }
-      return item;
+      if (item.id !== lineId) return item;
+      return {
+        ...item,
+        product_variant_id: variant.id,
+        variantSearch: variant.variant_name,
+        showDropdown: false,
+        unit_price: (variant as any).selling_price || item.unit_price,
+      };
     }));
   };
 
-  const calculateSubtotal = () => {
-    return lineItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
-  };
+  const calculateSubtotal = () =>
+    lineItems.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0);
 
   const calculateDiscount = () => {
     const subtotal = calculateSubtotal();
@@ -117,49 +141,34 @@ export default function CreateInvoicePage() {
     return (subtotal * discountPercentage) / 100;
   };
 
-  const calculateTotal = () => {
-    return calculateSubtotal() - calculateDiscount();
-  };
+  const calculateTotal = () => calculateSubtotal() - calculateDiscount();
 
   const checkCreditLimit = () => {
-    if (!selectedCustomer || selectedCustomer.customer_type === 'walk-in') {
-      return { allowed: true, message: '' };
-    }
-
+    if (!selectedCustomer || selectedCustomer.customer_type === 'walk-in') return { allowed: true, message: '' };
     const total = calculateTotal();
     const newBalance = selectedCustomer.current_balance + total;
     const availableCredit = selectedCustomer.credit_limit - selectedCustomer.current_balance;
-
     if (newBalance > selectedCustomer.credit_limit) {
-      return {
-        allowed: false,
-        message: `Credit limit exceeded. Available credit: KES ${availableCredit.toLocaleString()}`
-      };
+      return { allowed: false, message: `Credit limit exceeded. Available credit: KES ${availableCredit.toLocaleString('en-KE')}` };
     }
-
     return { allowed: true, message: '' };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validation
-    if (!customerId) {
+    if (!selectedCustomer) {
       toast.error('Please select a customer');
       return;
     }
-
     if (!locationId) {
       toast.error('Please select a storage location');
       return;
     }
-
     if (lineItems.length === 0) {
       toast.error('Please add at least one item');
       return;
     }
-
-    // Validate all line items
     for (const item of lineItems) {
       if (!item.product_variant_id) {
         toast.error('Please select a product for all line items');
@@ -175,7 +184,6 @@ export default function CreateInvoicePage() {
       }
     }
 
-    // Check credit limit
     const creditCheck = checkCreditLimit();
     if (!creditCheck.allowed) {
       toast.error(creditCheck.message);
@@ -184,9 +192,8 @@ export default function CreateInvoicePage() {
 
     try {
       setIsSubmitting(true);
-
       const payload: SaleCreateRequest = {
-        customer_id: customerId,
+        customer_id: selectedCustomer.id,
         sale_date: saleDate,
         storage_location_id: locationId,
         items: lineItems.map(item => ({
@@ -196,7 +203,6 @@ export default function CreateInvoicePage() {
         })),
         notes: notes || undefined,
       };
-
       const sale = await salesAPI.create(payload);
       toast.success('Invoice created successfully');
       router.push(`/sales/${sale.id}`);
@@ -207,14 +213,13 @@ export default function CreateInvoicePage() {
     }
   };
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const discountPercentage = selectedCustomer?.customer_tier?.discount_percentage || 0;
   const subtotal = calculateSubtotal();
   const discount = calculateDiscount();
   const total = calculateTotal();
+  const creditCheck = checkCreditLimit();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -238,7 +243,6 @@ export default function CreateInvoicePage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {isLoading ? (
           <div className="bg-white rounded-lg shadow p-8 text-center">
@@ -251,47 +255,60 @@ export default function CreateInvoicePage() {
             <div className="bg-white rounded-lg shadow p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Invoice Details</h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Customer *
-                  </label>
-                  <select
-                    value={customerId}
-                    onChange={(e) => handleCustomerChange(e.target.value)}
-                    required
-                    className="w-full px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select customer</option>
-                    {customers.map(customer => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                        {customer.customer_tier && ` (${customer.customer_tier.discount_percentage}% discount)`}
-                      </option>
-                    ))}
-                  </select>
+
+                {/* Searchable Customer Dropdown */}
+                <div ref={customerSearchRef}>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">Customer *</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Search customer..."
+                      value={customerSearch}
+                      onChange={(e) => {
+                        setCustomerSearch(e.target.value);
+                        setShowCustomerDropdown(true);
+                        if (!e.target.value) setSelectedCustomer(null);
+                      }}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      className="w-full pl-10 pr-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {showCustomerDropdown && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredCustomers.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-gray-500">No customers found</div>
+                        ) : (
+                          filteredCustomers.map(customer => (
+                            <button
+                              key={customer.id}
+                              type="button"
+                              onClick={() => handleCustomerSelect(customer)}
+                              className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                            >
+                              <div className="font-semibold text-gray-900 text-sm">{customer.name}</div>
+                              <div className="text-xs text-gray-500">
+                                {customer.customer_type === 'walk-in' ? 'Walk-in' : `Credit: KES ${(customer.credit_limit - customer.current_balance).toLocaleString('en-KE')} available`}
+                                {customer.customer_tier && ` • ${customer.customer_tier.discount_percentage}% discount`}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {selectedCustomer && selectedCustomer.customer_type !== 'walk-in' && (
-                    <div className="mt-2 text-sm">
-                      <div className="text-gray-600">
-                        Credit Limit: KES {selectedCustomer.credit_limit.toLocaleString()}
-                      </div>
-                      <div className="text-gray-600">
-                        Current Balance: KES {selectedCustomer.current_balance.toLocaleString()}
-                      </div>
-                      <div className={`font-semibold ${
-                        (selectedCustomer.credit_limit - selectedCustomer.current_balance) > 0 
-                          ? 'text-green-600' 
-                          : 'text-red-600'
-                      }`}>
-                        Available Credit: KES {(selectedCustomer.credit_limit - selectedCustomer.current_balance).toLocaleString()}
+                    <div className="mt-2 text-sm space-y-1">
+                      <div className="text-gray-600">Credit Limit: KES {selectedCustomer.credit_limit.toLocaleString('en-KE')}</div>
+                      <div className="text-gray-600">Current Balance: KES {selectedCustomer.current_balance.toLocaleString('en-KE')}</div>
+                      <div className={`font-semibold ${(selectedCustomer.credit_limit - selectedCustomer.current_balance) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        Available Credit: KES {(selectedCustomer.credit_limit - selectedCustomer.current_balance).toLocaleString('en-KE')}
                       </div>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-900 mb-2">
-                    Storage Location *
-                  </label>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">Storage Location *</label>
                   <select
                     value={locationId}
                     onChange={(e) => setLocationId(e.target.value)}
@@ -300,9 +317,7 @@ export default function CreateInvoicePage() {
                   >
                     <option value="">Select location</option>
                     {locations.map(location => (
-                      <option key={location.id} value={location.id}>
-                        {location.name}
-                      </option>
+                      <option key={location.id} value={location.id}>{location.name}</option>
                     ))}
                   </select>
                 </div>
@@ -333,25 +348,49 @@ export default function CreateInvoicePage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {lineItems.map((item, index) => (
+                  {lineItems.map((item) => (
                     <div key={item.id} className="grid grid-cols-12 gap-4 items-end">
-                      <div className="col-span-5">
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                          Product Variant *
-                        </label>
-                        <select
-                          value={item.product_variant_id}
-                          onChange={(e) => updateLineItem(item.id, 'product_variant_id', e.target.value)}
-                          required
-                          className="w-full px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Select product</option>
-                          {variants.map(variant => (
-                            <option key={variant.id} value={variant.id}>
-                              {variant.variant_name} {variant.sku ? `(${variant.sku})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                      {/* Searchable Variant Dropdown */}
+                      <div className="col-span-5 relative">
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Product Variant *</label>
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                          <input
+                            type="text"
+                            placeholder="Search variant..."
+                            value={item.variantSearch}
+                            onChange={(e) => {
+                              updateLineItem(item.id, 'variantSearch', e.target.value);
+                              updateLineItem(item.id, 'showDropdown', true);
+                              if (!e.target.value) updateLineItem(item.id, 'product_variant_id', '');
+                            }}
+                            onFocus={() => updateLineItem(item.id, 'showDropdown', true)}
+                            onBlur={() => setTimeout(() => updateLineItem(item.id, 'showDropdown', false), 200)}
+                            className="w-full pl-10 pr-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                          {item.showDropdown && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                              {getFilteredVariants(item.variantSearch).length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-gray-500">No variants found</div>
+                              ) : (
+                                getFilteredVariants(item.variantSearch).map(variant => (
+                                  <button
+                                    key={variant.id}
+                                    type="button"
+                                    onMouseDown={() => handleVariantSelect(item.id, variant)}
+                                    className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-0"
+                                  >
+                                    <div className="font-semibold text-gray-900 text-sm">{variant.variant_name}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {variant.sku && `SKU: ${variant.sku}`}
+                                      {(variant as any).selling_price && ` • KES ${Number((variant as any).selling_price).toLocaleString('en-KE')}`}
+                                    </div>
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       <div className="col-span-2">
@@ -378,11 +417,9 @@ export default function CreateInvoicePage() {
                       </div>
 
                       <div className="col-span-2">
-                        <label className="block text-sm font-semibold text-gray-900 mb-2">
-                          Line Total
-                        </label>
-                        <div className="px-4 py-3 bg-gray-50 border-2 border-gray-300 rounded-lg font-bold">
-                          {(item.quantity * item.unit_price).toLocaleString()}
+                        <label className="block text-sm font-semibold text-gray-900 mb-2">Line Total</label>
+                        <div className="px-4 py-3 bg-gray-50 border-2 border-gray-300 rounded-lg font-bold text-gray-900">
+                          KES {Number(item.quantity * item.unit_price).toLocaleString('en-KE')}
                         </div>
                       </div>
 
@@ -406,26 +443,24 @@ export default function CreateInvoicePage() {
               <div className="max-w-md ml-auto space-y-3">
                 <div className="flex justify-between text-gray-700">
                   <span>Subtotal:</span>
-                  <span className="font-semibold">KES {subtotal.toLocaleString()}</span>
+                  <span className="font-semibold">KES {Number(subtotal).toLocaleString('en-KE')}</span>
                 </div>
                 {discountPercentage > 0 && (
                   <div className="flex justify-between text-green-700">
                     <span>Discount ({discountPercentage}%):</span>
-                    <span className="font-semibold">- KES {discount.toLocaleString()}</span>
+                    <span className="font-semibold">- KES {Number(discount).toLocaleString('en-KE')}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xl font-bold text-gray-900 pt-3 border-t">
                   <span>Total:</span>
-                  <span>KES {total.toLocaleString()}</span>
+                  <span>KES {Number(total).toLocaleString('en-KE')}</span>
                 </div>
               </div>
             </div>
 
             {/* Notes */}
             <div className="bg-white rounded-lg shadow p-6">
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Notes (Optional)
-              </label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Notes (Optional)</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -436,24 +471,21 @@ export default function CreateInvoicePage() {
             </div>
 
             {/* Credit Warning */}
-            {selectedCustomer && selectedCustomer.customer_type !== 'walk-in' && !checkCreditLimit().allowed && (
+            {selectedCustomer && selectedCustomer.customer_type !== 'walk-in' && !creditCheck.allowed && (
               <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 flex items-start space-x-3">
                 <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
-                <div className="flex-1">
+                <div>
                   <h3 className="font-semibold text-red-900">Credit Limit Exceeded</h3>
-                  <p className="text-sm text-red-700 mt-1">{checkCreditLimit().message}</p>
+                  <p className="text-sm text-red-700 mt-1">{creditCheck.message}</p>
                 </div>
               </div>
             )}
 
-            {/* Submit */}
             <div className="flex justify-end space-x-3">
               <Link href="/sales">
-                <Button type="button" variant="outline">
-                  Cancel
-                </Button>
+                <Button type="button" variant="outline">Cancel</Button>
               </Link>
-              <Button type="submit" disabled={isSubmitting || !checkCreditLimit().allowed}>
+              <Button type="submit" disabled={isSubmitting || !creditCheck.allowed}>
                 {isSubmitting ? 'Creating...' : 'Create Invoice'}
               </Button>
             </div>
