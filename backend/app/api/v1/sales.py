@@ -49,7 +49,6 @@ async def update_inventory_from_sale(
     is_credit_note: bool = False
 ):
     """Update inventory and create transaction for sale/credit note"""
-    # Get or create inventory item
     item_response = supabase.table("inventory_items")\
         .select("*")\
         .eq("product_variant_id", variant_id)\
@@ -57,7 +56,6 @@ async def update_inventory_from_sale(
         .execute()
     
     if item_response.data:
-        # Update existing
         current_qty = item_response.data[0]["quantity"]
         new_qty = current_qty - quantity if not is_credit_note else current_qty + abs(quantity)
         
@@ -67,7 +65,6 @@ async def update_inventory_from_sale(
             .execute()
     else:
         if is_credit_note:
-            # Create new item for returns
             supabase.table("inventory_items").insert({
                 "company_id": company_id,
                 "product_variant_id": variant_id,
@@ -75,7 +72,6 @@ async def update_inventory_from_sale(
                 "quantity": abs(quantity)
             }).execute()
     
-    # Create inventory transaction
     transaction_type = "in" if is_credit_note else "out"
     transaction_quantity = abs(quantity)
     
@@ -132,7 +128,7 @@ async def create_sale(
         
         # Check stock availability for all items
         for item in sale_data.items:
-            if item.quantity > 0:  # Only check for regular sales (not credit notes)
+            if item.quantity > 0:
                 available = await check_stock_availability(
                     supabase,
                     item.product_variant_id,
@@ -141,7 +137,6 @@ async def create_sale(
                 )
                 
                 if not available:
-                    # Get variant name for error message
                     variant_response = supabase.table("product_variants")\
                         .select("variant_name")\
                         .eq("id", item.product_variant_id)\
@@ -226,7 +221,6 @@ async def create_sale(
                 "line_total": line_total
             }).execute()
             
-            # Update inventory
             await update_inventory_from_sale(
                 supabase,
                 company["id"],
@@ -293,17 +287,14 @@ async def get_sales(
         
         sales = []
         for sale in response.data:
-            # Extract nested data
             customer = sale.pop("customers", None)
             location = sale.pop("storage_locations", None)
             original = sale.pop("original_sale", None)
             
             sale["customer"] = customer
             sale["storage_location"] = location
-            # Supabase returns array - get first item or None
             sale["original_sale"] = original[0] if original and len(original) > 0 else None
 
-            # Get sale items
             items_response = supabase.table("sale_items")\
                 .select("*, product_variants(id, variant_name, sku, products(name))")\
                 .eq("sale_id", sale["id"])\
@@ -317,7 +308,6 @@ async def get_sales(
             
             sale["items"] = items
             
-            # Get payments
             payments_response = supabase.table("sale_payments")\
                 .select("*")\
                 .eq("sale_id", sale["id"])\
@@ -335,7 +325,7 @@ async def get_sales(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    
+
 @router.get("/{sale_id}/pdf")
 async def download_sale_pdf(
     sale_id: str,
@@ -345,7 +335,6 @@ async def download_sale_pdf(
 ):
     """Download sale as PDF"""
     try:
-        # Get sale data
         response = supabase.table("sales")\
             .select("*, customers(id, name, customer_type, email, phone), storage_locations(id, name), original_sale:sales!original_sale_id(sale_number, sale_type)")\
             .match({"id": sale_id, "company_id": company["id"]})\
@@ -359,7 +348,6 @@ async def download_sale_pdf(
         
         sale = response.data[0]
         
-        # Extract nested data
         customer = sale.pop("customers", None)
         location = sale.pop("storage_locations", None)
         original = sale.pop("original_sale", None)
@@ -368,7 +356,6 @@ async def download_sale_pdf(
         sale["storage_location"] = location
         sale["original_sale"] = original[0] if original and len(original) > 0 else None
 
-        # Get sale items
         items_response = supabase.table("sale_items")\
             .select("*, product_variants(id, variant_name, sku, products(name))")\
             .eq("sale_id", sale_id)\
@@ -382,7 +369,6 @@ async def download_sale_pdf(
         
         sale["items"] = items
         
-        # Get payments
         payments_response = supabase.table("sale_payments")\
             .select("*")\
             .eq("sale_id", sale_id)\
@@ -391,16 +377,12 @@ async def download_sale_pdf(
         
         sale["payments"] = payments_response.data
         
-        # Get company data
         company_data = {
             "name": company.get("name", "Company Name"),
             "address": company.get("address", "")
         }
         
-        # Generate PDF
         pdf_buffer = generate_invoice_pdf(sale, company_data)
-        
-        # Determine filename
         filename = f"{sale['sale_number']}.pdf"
         
         return StreamingResponse(
@@ -412,7 +394,6 @@ async def download_sale_pdf(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"ERROR generating PDF: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
@@ -440,17 +421,14 @@ async def get_sale(
         
         sale = response.data[0]
         
-        # Extract nested data
         customer = sale.pop("customers", None)
         location = sale.pop("storage_locations", None)
         original = sale.pop("original_sale", None)
         
         sale["customer"] = customer
         sale["storage_location"] = location
-        # Supabase returns array - get first item or None
         sale["original_sale"] = original[0] if original and len(original) > 0 else None
 
-        # Get sale items
         items_response = supabase.table("sale_items")\
             .select("*, product_variants(id, variant_name, sku, products(name))")\
             .eq("sale_id", sale_id)\
@@ -464,7 +442,6 @@ async def get_sale(
         
         sale["items"] = items
         
-        # Get payments
         payments_response = supabase.table("sale_payments")\
             .select("*")\
             .eq("sale_id", sale_id)\
@@ -482,7 +459,7 @@ async def get_sale(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
-    
+
 @router.post("/credit-notes/", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
 async def create_credit_note(
     credit_note_data: CreditNoteCreate,
@@ -494,7 +471,7 @@ async def create_credit_note(
     try:
         # Get original sale
         original_sale_response = supabase.table("sales")\
-            .select("*, customers(id, current_balance, customer_tiers(discount_percentage)), storage_locations(id)")\
+            .select("*, customers(id, current_balance), storage_locations(id)")\
             .match({"id": credit_note_data.original_sale_id, "company_id": company["id"]})\
             .execute()
         
@@ -506,7 +483,6 @@ async def create_credit_note(
         
         original_sale = original_sale_response.data[0]
         
-        # Verify original is an invoice (not a credit note)
         if original_sale["sale_type"] != "invoice":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -514,9 +490,7 @@ async def create_credit_note(
             )
         
         customer = original_sale.pop("customers", None)
-        customer_tier = customer.pop("customer_tiers", None)
-        tier_discount = customer_tier["discount_percentage"] if customer_tier else 0
-        storage_location = original_sale.pop("storage_locations", None)
+        original_sale.pop("storage_locations", None)
         
         # Get original sale items
         original_items_response = supabase.table("sale_items")\
@@ -526,7 +500,7 @@ async def create_credit_note(
         
         original_items = {item["id"]: item for item in original_items_response.data}
         
-        # Validate return quantities
+        # Validate return quantities and build credit note items
         subtotal = 0
         credit_note_items = []
         
@@ -539,28 +513,29 @@ async def create_credit_note(
             
             original_item = original_items[return_item.sale_item_id]
             
-            # Validate return quantity doesn't exceed original
             if return_item.return_quantity > original_item["quantity"]:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Return quantity ({return_item.return_quantity}) exceeds original quantity ({original_item['quantity']})"
                 )
             
-            # Calculate amounts (negative for credit notes)
-            item_subtotal = -(return_item.return_quantity * original_item["unit_price"])
+            # Use effective unit price (already discounted) from original sale item
+            # This ensures the credit note reflects what the customer actually paid
+            effective_unit_price = original_item["line_total"] / original_item["quantity"]
+            item_subtotal = -(return_item.return_quantity * effective_unit_price)
             subtotal += item_subtotal
             
             credit_note_items.append({
                 "product_variant_id": original_item["product_variant_id"],
                 "quantity": -return_item.return_quantity,
-                "unit_price": original_item["unit_price"],
-                "discount_percentage": tier_discount
+                "unit_price": effective_unit_price,
+                "discount_percentage": 0
             })
         
-        # Calculate totals (all negative)
-        discount_percentage = tier_discount
-        discount_amount = (subtotal * discount_percentage) / 100
-        total_amount = subtotal - discount_amount
+        # No additional discount — effective unit price already reflects discounted price
+        discount_percentage = 0
+        discount_amount = 0
+        total_amount = subtotal
         
         # Generate credit note number
         sale_number_response = supabase.rpc(
@@ -601,20 +576,19 @@ async def create_credit_note(
         
         # Create credit note items and update inventory
         for item in credit_note_items:
-            item_discount_amount = (item["quantity"] * item["unit_price"] * discount_percentage) / 100
-            line_total = (item["quantity"] * item["unit_price"]) - item_discount_amount
+            # No discount — unit price is already the effective discounted price
+            line_total = item["quantity"] * item["unit_price"]
             
             supabase.table("sale_items").insert({
                 "sale_id": credit_note_id,
                 "product_variant_id": item["product_variant_id"],
                 "quantity": item["quantity"],
                 "unit_price": item["unit_price"],
-                "discount_percentage": discount_percentage,
-                "discount_amount": item_discount_amount,
+                "discount_percentage": 0,
+                "discount_amount": 0,
                 "line_total": line_total
             }).execute()
             
-            # Update inventory (add stock back)
             await update_inventory_from_sale(
                 supabase,
                 company["id"],
@@ -626,7 +600,7 @@ async def create_credit_note(
                 is_credit_note=True
             )
         
-        # Update customer balance (decrease by credit note amount - which is negative)
+        # Update customer balance (decrease by credit note amount — which is negative)
         new_customer_balance = customer["current_balance"] + total_amount
         supabase.table("customers")\
             .update({"current_balance": new_customer_balance})\
@@ -652,7 +626,6 @@ async def record_payment(
 ):
     """Record a payment for a sale"""
     try:
-        # Validate payment method and reference number
         if payment_data.payment_method in ["mpesa", "bank", "card"] and not payment_data.reference_number:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -665,7 +638,6 @@ async def record_payment(
                 detail="Reference number should not be provided for cash payments"
             )
         
-        # Get sale
         sale_response = supabase.table("sales")\
             .select("*, customers(id, current_balance)")\
             .eq("id", payment_data.sale_id)\
@@ -681,14 +653,12 @@ async def record_payment(
         sale = sale_response.data[0]
         customer = sale.pop("customers", None)
         
-        # Validate payment amount doesn't exceed amount due
         if payment_data.amount > sale["amount_due"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Payment amount (KES {payment_data.amount:,.2f}) exceeds amount due (KES {sale['amount_due']:,.2f})"
             )
         
-        # Create payment record
         payment_response = supabase.table("sale_payments").insert({
             "sale_id": payment_data.sale_id,
             "payment_date": payment_data.payment_date.isoformat(),
@@ -705,7 +675,6 @@ async def record_payment(
                 detail="Failed to create payment"
             )
         
-        # Update sale payment status
         new_amount_paid = sale["amount_paid"] + payment_data.amount
         new_amount_due = sale["amount_due"] - payment_data.amount
         
@@ -759,7 +728,6 @@ async def get_sale_payments(
 ):
     """Get all payments for a sale"""
     try:
-        # Verify sale exists and belongs to company
         sale_response = supabase.table("sales")\
             .select("id")\
             .eq("id", sale_id)\
@@ -772,7 +740,6 @@ async def get_sale_payments(
                 detail="Sale not found"
             )
         
-        # Get payments
         payments_response = supabase.table("sale_payments")\
             .select("*")\
             .eq("sale_id", sale_id)\

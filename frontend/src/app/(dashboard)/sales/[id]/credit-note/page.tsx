@@ -8,16 +8,16 @@ import { salesAPI, SaleWithDetails, CreditNoteCreateRequest, CreditNoteItemReque
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { ArrowLeft, FileText, AlertCircle } from 'lucide-react';
+import { ArrowLeft, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ReturnItem {
   sale_item_id: string;
-  product_name: string;
   variant_name: string;
   original_quantity: number;
   return_quantity: number;
   unit_price: number;
+  effective_unit_price: number;
   selected: boolean;
 }
 
@@ -45,8 +45,7 @@ export default function CreateCreditNotePage() {
     try {
       setIsLoading(true);
       const data = await salesAPI.getById(params.id as string);
-      
-      // Verify it's an invoice
+
       if (data.sale_type !== 'invoice') {
         toast.error('Can only create credit notes for invoices');
         router.push(`/sales/${params.id}`);
@@ -55,20 +54,18 @@ export default function CreateCreditNotePage() {
 
       setOriginalSale(data);
 
-      // Initialize return items from original sale items
       const items: ReturnItem[] = data.items.map(item => ({
         sale_item_id: item.id,
-        product_name: item.product_variant?.products?.name || 'Unknown Product',
         variant_name: item.product_variant?.variant_name || 'Unknown Variant',
         original_quantity: item.quantity,
         return_quantity: 0,
         unit_price: item.unit_price,
+        effective_unit_price: item.line_total / item.quantity,
         selected: false,
       }));
       setReturnItems(items);
     } catch (error: any) {
       toast.error('Failed to load original sale');
-      console.error(error);
       router.push('/sales');
     } finally {
       setIsLoading(false);
@@ -94,7 +91,6 @@ export default function CreateCreditNotePage() {
     setReturnItems(items =>
       items.map(item => {
         if (item.sale_item_id === saleItemId) {
-          // Ensure quantity doesn't exceed original
           const validQuantity = Math.min(Math.max(0, quantity), item.original_quantity);
           return { ...item, return_quantity: validQuantity };
         }
@@ -103,38 +99,27 @@ export default function CreateCreditNotePage() {
     );
   };
 
+  // No discount applied — credit notes return at the unit price paid
   const calculateReturnTotal = () => {
-    const subtotal = returnItems
+    const total = returnItems
       .filter(item => item.selected && item.return_quantity > 0)
-      .reduce((sum, item) => sum + (item.return_quantity * item.unit_price), 0);
-
-    const discountPercentage = originalSale?.discount_percentage || 0;
-    const discount = (subtotal * discountPercentage) / 100;
-    const total = subtotal - discount;
-
-    return { subtotal, discount, total, discountPercentage };
+      .reduce((sum, item) => sum + (item.return_quantity * item.effective_unit_price), 0);
+    return total;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!originalSale) return;
 
-    // Validate at least one item is selected
     const selectedItems = returnItems.filter(item => item.selected && item.return_quantity > 0);
     if (selectedItems.length === 0) {
       toast.error('Please select at least one item to return');
       return;
     }
 
-    // Validate all selected items have return quantity > 0
     for (const item of selectedItems) {
-      if (item.return_quantity <= 0) {
-        toast.error('Return quantity must be greater than 0 for selected items');
-        return;
-      }
       if (item.return_quantity > item.original_quantity) {
-        toast.error(`Return quantity cannot exceed original quantity for ${item.product_name}`);
+        toast.error(`Return quantity cannot exceed original quantity for ${item.variant_name}`);
         return;
       }
     }
@@ -142,15 +127,13 @@ export default function CreateCreditNotePage() {
     try {
       setIsSubmitting(true);
 
-      const creditNoteItems: CreditNoteItemRequest[] = selectedItems.map(item => ({
-        sale_item_id: item.sale_item_id,
-        return_quantity: item.return_quantity,
-      }));
-
       const payload: CreditNoteCreateRequest = {
         original_sale_id: originalSale.id,
         sale_date: saleDate,
-        items: creditNoteItems,
+        items: selectedItems.map(item => ({
+          sale_item_id: item.sale_item_id,
+          return_quantity: item.return_quantity,
+        })),
         notes: notes || undefined,
       };
 
@@ -164,9 +147,7 @@ export default function CreateCreditNotePage() {
     }
   };
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   if (isLoading) {
     return (
@@ -179,11 +160,9 @@ export default function CreateCreditNotePage() {
     );
   }
 
-  if (!originalSale) {
-    return null;
-  }
+  if (!originalSale) return null;
 
-  const returnTotals = calculateReturnTotal();
+  const returnTotal = calculateReturnTotal();
   const hasSelectedItems = returnItems.some(item => item.selected && item.return_quantity > 0);
 
   return (
@@ -200,9 +179,7 @@ export default function CreateCreditNotePage() {
               </Link>
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Create Credit Note</h1>
-                <p className="text-sm text-gray-600 mt-1">
-                  For Invoice: {originalSale.sale_number}
-                </p>
+                <p className="text-sm text-gray-600 mt-1">For Invoice: {originalSale.sale_number}</p>
               </div>
             </div>
             <Link href={`/sales/${params.id}`}>
@@ -212,43 +189,35 @@ export default function CreateCreditNotePage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Info Alert */}
           <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-            <div className="flex-1">
+            <div>
               <h3 className="font-semibold text-blue-900">Creating Credit Note</h3>
               <p className="text-sm text-blue-700 mt-1">
-                Select the items being returned and specify the return quantities. 
-                The original invoice will remain unchanged for audit purposes.
+                Select the items being returned and specify quantities. Credit notes are issued at the original unit price with no discounts applied.
               </p>
             </div>
           </div>
 
-          {/* Credit Note Details */}
+          {/* Details */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Note Details</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Customer (Locked)
-                </label>
-                <div className="px-4 py-3 bg-gray-50 border-2 border-gray-300 rounded-lg">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Customer (Locked)</label>
+                <div className="px-4 py-3 bg-gray-50 border-2 border-gray-300 rounded-lg text-gray-900">
                   {originalSale.customer?.name}
                 </div>
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                  Storage Location (Locked)
-                </label>
-                <div className="px-4 py-3 bg-gray-50 border-2 border-gray-300 rounded-lg">
+                <label className="block text-sm font-semibold text-gray-900 mb-2">Storage Location (Locked)</label>
+                <div className="px-4 py-3 bg-gray-50 border-2 border-gray-300 rounded-lg text-gray-900">
                   {originalSale.storage_location?.name}
                 </div>
               </div>
-
               <Input
                 label="Credit Note Date *"
                 type="date"
@@ -268,7 +237,7 @@ export default function CreateCreditNotePage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">Select</TableHead>
-                  <TableHead>Product</TableHead>
+                  <TableHead>Product Variant</TableHead>
                   <TableHead className="text-right">Original Qty</TableHead>
                   <TableHead className="text-right">Return Qty</TableHead>
                   <TableHead className="text-right">Unit Price</TableHead>
@@ -286,13 +255,10 @@ export default function CreateCreditNotePage() {
                         className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
                       />
                     </TableCell>
-                    <TableCell>
-                      <div className="font-semibold">{item.product_name}</div>
-                      <div className="text-sm text-gray-600">{item.variant_name}</div>
+                    <TableCell className="font-semibold text-gray-900">
+                      {item.variant_name}
                     </TableCell>
-                    <TableCell className="text-right font-semibold">
-                      {item.original_quantity}
-                    </TableCell>
+                    <TableCell className="text-right font-semibold">{item.original_quantity}</TableCell>
                     <TableCell className="text-right">
                       {item.selected ? (
                         <input
@@ -308,11 +274,16 @@ export default function CreateCreditNotePage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      KES {item.unit_price.toLocaleString()}
+                      <div>KES {Number(item.effective_unit_price).toLocaleString('en-KE')}</div>
+                      {item.unit_price !== item.effective_unit_price && (
+                        <div className="text-xs text-gray-400 line-through">
+                          KES {Number(item.unit_price).toLocaleString('en-KE')}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-right font-bold text-red-600">
                       {item.selected && item.return_quantity > 0
-                        ? `- KES ${(item.return_quantity * item.unit_price).toLocaleString()}`
+                        ? `- KES ${Number(item.return_quantity * item.effective_unit_price).toLocaleString('en-KE')}`
                         : '-'}
                     </TableCell>
                   </TableRow>
@@ -321,36 +292,20 @@ export default function CreateCreditNotePage() {
             </Table>
           </div>
 
-          {/* Credit Note Totals */}
+          {/* Credit Note Summary - no discount */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Credit Note Summary</h2>
             <div className="max-w-md ml-auto space-y-3">
-              <div className="flex justify-between text-gray-700">
-                <span>Subtotal:</span>
-                <span className="font-semibold text-red-600">
-                  - KES {returnTotals.subtotal.toLocaleString()}
-                </span>
-              </div>
-              {returnTotals.discountPercentage > 0 && (
-                <div className="flex justify-between text-gray-600">
-                  <span>Discount ({returnTotals.discountPercentage}%):</span>
-                  <span className="font-semibold">
-                    + KES {returnTotals.discount.toLocaleString()}
-                  </span>
-                </div>
-              )}
               <div className="flex justify-between text-xl font-bold text-red-600 pt-3 border-t">
                 <span>Credit Note Total:</span>
-                <span>- KES {returnTotals.total.toLocaleString()}</span>
+                <span>- KES {Number(returnTotal).toLocaleString('en-KE')}</span>
               </div>
             </div>
           </div>
 
           {/* Notes */}
           <div className="bg-white rounded-lg shadow p-6">
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
-              Notes (Optional)
-            </label>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">Notes (Optional)</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -360,12 +315,9 @@ export default function CreateCreditNotePage() {
             />
           </div>
 
-          {/* Submit */}
           <div className="flex justify-end space-x-3">
             <Link href={`/sales/${params.id}`}>
-              <Button type="button" variant="outline">
-                Cancel
-              </Button>
+              <Button type="button" variant="outline">Cancel</Button>
             </Link>
             <Button type="submit" disabled={isSubmitting || !hasSelectedItems}>
               {isSubmitting ? 'Creating...' : 'Create Credit Note'}

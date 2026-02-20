@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { salesAPI, SaleWithDetails, SaleType, PaymentStatus } from '@/lib/sales';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, FileText, Eye, DollarSign, Receipt, AlertCircle } from 'lucide-react';
+import { Plus, Receipt, Eye, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SalesPage() {
@@ -16,9 +16,9 @@ export default function SalesPage() {
   const [sales, setSales] = useState<SaleWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filters
   const [filterType, setFilterType] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     if (!user) {
@@ -32,11 +32,9 @@ export default function SalesPage() {
     try {
       setIsLoading(true);
       const data = await salesAPI.getAll({ limit: 100 });
-      console.log('Loaded sales data:', data); // Debug: see all sales
       setSales(data);
     } catch (error: any) {
       toast.error('Failed to load sales');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -44,48 +42,34 @@ export default function SalesPage() {
 
   const getSaleTypeColor = (type: string) => {
     switch (type) {
-      case 'invoice':
-        return 'bg-blue-100 text-blue-800';
-      case 'credit_note':
-        return 'bg-orange-100 text-orange-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+      case 'invoice': return 'bg-blue-100 text-blue-800';
+      case 'credit_note': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800';
-      case 'partial':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'unpaid':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getSaleTypeLabel = (type: string) => {
-    switch (type) {
-      case 'invoice':
-        return 'Invoice';
-      case 'credit_note':
-        return 'Credit Note';
-      default:
-        return type;
+      case 'paid': return 'bg-green-100 text-green-800';
+      case 'partial': return 'bg-yellow-100 text-yellow-800';
+      case 'unpaid': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   const filteredSales = sales.filter(sale => {
     if (filterType && sale.sale_type !== filterType) return false;
     if (filterStatus && sale.payment_status !== filterStatus) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const matchesSaleNumber = sale.sale_number.toLowerCase().includes(query);
+      const matchesCustomer = sale.customer?.name.toLowerCase().includes(query);
+      if (!matchesSaleNumber && !matchesCustomer) return false;
+    }
     return true;
   });
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -102,46 +86,51 @@ export default function SalesPage() {
                 <p className="text-sm text-gray-600">Manage invoices and credit notes</p>
               </div>
             </div>
-            <div className="flex items-center space-x-3">
-              <Link href="/sales/create">
-                <Button className="flex items-center space-x-2">
-                  <Plus className="w-4 h-4" />
-                  <span>New Invoice</span>
-                </Button>
-              </Link>
-            </div>
+            <Link href="/sales/create">
+              <Button className="flex items-center space-x-2">
+                <Plus className="w-4 h-4" />
+                <span>New Invoice</span>
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Filters */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Type
-              </label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search by customer or sale number..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Type</label>
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               >
                 <option value="">All Types</option>
                 <option value={SaleType.INVOICE}>Invoices</option>
                 <option value={SaleType.CREDIT_NOTE}>Credit Notes</option>
               </select>
             </div>
-
             <div>
-              <label className="block text-sm font-semibold text-gray-900 mb-2">
-                Payment Status
-              </label>
+              <label className="block text-sm font-semibold text-gray-900 mb-2">Payment Status</label>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
               >
                 <option value="">All Statuses</option>
                 <option value={PaymentStatus.PAID}>Paid</option>
@@ -162,7 +151,11 @@ export default function SalesPage() {
           ) : filteredSales.length === 0 ? (
             <div className="p-8 text-center">
               <Receipt className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600">No sales found. Create your first invoice!</p>
+              <p className="text-gray-600">
+                {searchQuery || filterType || filterStatus
+                  ? 'No sales match your filters'
+                  : 'No sales found. Create your first invoice!'}
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -181,56 +174,53 @@ export default function SalesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSales.map((sale) => {
-                    console.log('Rendering sale - ID:', sale.id, 'Number:', sale.sale_number);
-                    return (
-                      <TableRow key={sale.id}>
-                        <TableCell className="font-semibold">
-                          {sale.sale_number}
-                          {sale.original_sale && (
-                            <div className="text-xs text-gray-500 mt-1">
-                              Ref: {sale.original_sale.sale_number}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 text-xs font-semibold rounded ${getSaleTypeColor(sale.sale_type)}`}>
-                            {getSaleTypeLabel(sale.sale_type)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {new Date(sale.sale_date).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {sale.customer?.name || '-'}
-                        </TableCell>
-                        <TableCell className={`font-bold ${sale.total_amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          KES {sale.total_amount.toLocaleString()}
-                        </TableCell>
-                        <TableCell className="font-semibold">
-                          KES {sale.amount_paid.toLocaleString()}
-                        </TableCell>
-                        <TableCell className={`font-semibold ${sale.amount_due > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                          KES {sale.amount_due.toLocaleString()}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(sale.payment_status)}`}>
-                            {sale.payment_status.charAt(0).toUpperCase() + sale.payment_status.slice(1)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href={`/sales/${sale.id}`}>
-                            <button
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {filteredSales.map((sale) => (
+                    <TableRow key={sale.id}>
+                      <TableCell className="font-semibold">
+                        {sale.sale_number}
+                        {sale.original_sale && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Ref: {sale.original_sale.sale_number}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded ${getSaleTypeColor(sale.sale_type)}`}>
+                          {sale.sale_type === 'invoice' ? 'Invoice' : 'Credit Note'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-sm text-gray-900">
+                        {new Date(sale.sale_date).toLocaleDateString('en-KE')}
+                      </TableCell>
+                      <TableCell className="font-medium text-gray-900">
+                        {sale.customer?.name || '-'}
+                      </TableCell>
+                      <TableCell className={`font-bold ${sale.total_amount < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        KES {Number(sale.total_amount).toLocaleString('en-KE')}
+                      </TableCell>
+                      <TableCell className="font-semibold text-gray-900">
+                        KES {Number(sale.amount_paid).toLocaleString('en-KE')}
+                      </TableCell>
+                      <TableCell className={`font-semibold ${sale.amount_due > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        KES {Number(sale.amount_due).toLocaleString('en-KE')}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(sale.payment_status)}`}>
+                          {sale.payment_status.charAt(0).toUpperCase() + sale.payment_status.slice(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/sales/${sale.id}`}>
+                          <button
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>

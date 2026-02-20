@@ -103,6 +103,7 @@ export interface SaleItemCreateRequest {
   product_variant_id: string;
   quantity: number;
   unit_price: number;
+  discount_percentage?: number;
 }
 
 export interface SaleCreateRequest {
@@ -166,7 +167,7 @@ export const salesAPI = {
 
   // Create credit note
   createCreditNote: async (data: CreditNoteCreateRequest): Promise<Sale> => {
-    const response = await apiClient.post<Sale>('/sales/credit-notes', data);
+    const response = await apiClient.post<Sale>('/sales/credit-notes/', data);
     return response.data;
   },
 
