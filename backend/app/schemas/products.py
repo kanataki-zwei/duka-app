@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
 
@@ -38,10 +38,6 @@ class ProductBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     sku: Optional[str] = Field(None, max_length=50)
-    avg_buying_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    avg_selling_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    min_stock_level: Optional[int] = Field(None, ge=0)
-    reorder_quantity: Optional[int] = Field(None, ge=0)
 
 class ProductCreate(ProductBase):
     pass
@@ -51,10 +47,6 @@ class ProductUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     sku: Optional[str] = Field(None, max_length=50)
-    avg_buying_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    avg_selling_price: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
-    min_stock_level: Optional[int] = Field(None, ge=0)
-    reorder_quantity: Optional[int] = Field(None, ge=0)
     is_active: Optional[bool] = None
 
 class ProductResponse(ProductBase):
@@ -63,6 +55,9 @@ class ProductResponse(ProductBase):
     created_at: datetime
     updated_at: datetime
     is_active: bool
+    variant_count: Optional[int] = 0
+    avg_buying_price: Optional[Decimal] = None
+    avg_selling_price: Optional[Decimal] = None
 
     class Config:
         from_attributes = True

@@ -4,17 +4,17 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/authStore';
-import { 
-  productsAPI, 
-  productVariantsAPI, 
-  Product, 
-  ProductVariant, 
-  VariantCreateRequest 
+import {
+  productsAPI,
+  productVariantsAPI,
+  Product,
+  ProductVariant,
+  VariantCreateRequest
 } from '@/lib/products';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, ArrowLeft, Package } from 'lucide-react';
+import { Plus, Edit2, Trash2, ArrowLeft, Package, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function ProductDetailPage() {
@@ -22,14 +22,14 @@ export default function ProductDetailPage() {
   const params = useParams();
   const productId = params.id as string;
   const { user } = useAuthStore();
-  
+
   const [product, setProduct] = useState<Product | null>(null);
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingVariant, setEditingVariant] = useState<ProductVariant | null>(null);
+  const [generatingSku, setGeneratingSku] = useState(false);
 
-  // Form state
   const [formData, setFormData] = useState<VariantCreateRequest>({
     product_id: productId,
     variant_name: '',
@@ -59,15 +59,25 @@ export default function ProductDetailPage() {
       setVariants(variantsData);
     } catch (error: any) {
       toast.error('Failed to load product details');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleGenerateSku = async () => {
+    setGeneratingSku(true);
+    try {
+      const sku = await productVariantsAPI.generateSku();
+      setFormData((prev) => ({ ...prev, sku }));
+    } catch {
+      toast.error('Failed to generate SKU');
+    } finally {
+      setGeneratingSku(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       if (editingVariant) {
         await productVariantsAPI.update(editingVariant.id, formData);
@@ -76,11 +86,7 @@ export default function ProductDetailPage() {
         await productVariantsAPI.create(formData);
         toast.success('Variant created successfully');
       }
-      
-      // Reset form
       resetForm();
-      
-      // Reload variants
       loadData();
     } catch (error: any) {
       toast.error(error.response?.data?.detail || 'Failed to save variant');
@@ -102,10 +108,7 @@ export default function ProductDetailPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this variant?')) {
-      return;
-    }
-
+    if (!confirm('Are you sure you want to delete this variant?')) return;
     try {
       await productVariantsAPI.delete(id);
       toast.success('Variant deleted successfully');
@@ -120,7 +123,7 @@ export default function ProductDetailPage() {
     setEditingVariant(null);
     setFormData({
       product_id: productId,
-      variant_name: '',
+      variant_name: product?.name || '',
       sku: '',
       buying_price: undefined,
       selling_price: undefined,
@@ -129,9 +132,7 @@ export default function ProductDetailPage() {
     });
   };
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   if (isLoading) {
     return (
@@ -181,7 +182,10 @@ export default function ProductDetailPage() {
               </div>
             </div>
             <Button
-              onClick={() => setShowCreateForm(true)}
+              onClick={() => {
+                setFormData((prev) => ({ ...prev, variant_name: product?.name || '' }));
+                setShowCreateForm(true);
+              }}
               className="flex items-center space-x-2"
             >
               <Plus className="w-4 h-4" />
@@ -191,36 +195,45 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Product Info Card */}
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Product Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-gray-600">SKU</p>
-              <p className="text-base font-semibold text-gray-900">{product.sku || '-'}</p>
+              <p className="text-base font-semibold text-gray-900 font-mono">
+                {product.sku || '-'}
+              </p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Avg. Buying Price</p>
               <p className="text-base font-semibold text-gray-900">
-                {product.avg_buying_price ? `KES ${product.avg_buying_price.toLocaleString()}` : '-'}
+                {product.avg_buying_price
+                  ? `KES ${Number(product.avg_buying_price).toLocaleString()}`
+                  : '-'}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Avg. Selling Price</p>
               <p className="text-base font-semibold text-gray-900">
-                {product.avg_selling_price ? `KES ${product.avg_selling_price.toLocaleString()}` : '-'}
+                {product.avg_selling_price
+                  ? `KES ${Number(product.avg_selling_price).toLocaleString()}`
+                  : '-'}
               </p>
             </div>
             <div>
               <p className="text-sm text-gray-600">Status</p>
               <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${
-                product.is_active 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-gray-100 text-gray-800'
+                product.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
               }`}>
                 {product.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Variants</p>
+              <span className="inline-block px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                {product.variant_count} {product.variant_count === 1 ? 'variant' : 'variants'}
               </span>
             </div>
           </div>
@@ -232,7 +245,7 @@ export default function ProductDetailPage() {
           )}
         </div>
 
-        {/* Create/Edit Form */}
+        {/* Create/Edit Variant Form */}
         {showCreateForm && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -248,21 +261,39 @@ export default function ProductDetailPage() {
                   required
                 />
 
-                <Input
-                  label="SKU (Optional)"
-                  value={formData.sku}
-                  onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                  placeholder="e.g., IP15-128-SLV"
-                />
+                {/* SKU with Generate button */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-900 mb-2">
+                    SKU (Optional)
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={formData.sku}
+                      onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                      placeholder="e.g., IP15-128-SLV"
+                      className="flex-1 px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleGenerateSku}
+                      disabled={generatingSku}
+                      className="flex items-center space-x-1.5 px-3 py-2 text-sm font-medium bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors disabled:opacity-50 whitespace-nowrap border-2 border-purple-200"
+                    >
+                      <Wand2 className="w-4 h-4" />
+                      <span>{generatingSku ? 'Generating...' : 'Generate'}</span>
+                    </button>
+                  </div>
+                </div>
 
                 <Input
                   label="Buying Price"
                   type="number"
                   step="0.01"
                   value={formData.buying_price || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    buying_price: e.target.value ? parseFloat(e.target.value) : undefined 
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    buying_price: e.target.value ? parseFloat(e.target.value) : undefined
                   })}
                   placeholder="0.00"
                 />
@@ -272,9 +303,9 @@ export default function ProductDetailPage() {
                   type="number"
                   step="0.01"
                   value={formData.selling_price || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    selling_price: e.target.value ? parseFloat(e.target.value) : undefined 
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    selling_price: e.target.value ? parseFloat(e.target.value) : undefined
                   })}
                   placeholder="0.00"
                 />
@@ -283,9 +314,9 @@ export default function ProductDetailPage() {
                   label="Minimum Stock Level"
                   type="number"
                   value={formData.min_stock_level || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    min_stock_level: e.target.value ? parseInt(e.target.value) : undefined 
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    min_stock_level: e.target.value ? parseInt(e.target.value) : undefined
                   })}
                   placeholder="0"
                 />
@@ -294,9 +325,9 @@ export default function ProductDetailPage() {
                   label="Reorder Quantity"
                   type="number"
                   value={formData.reorder_quantity || ''}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    reorder_quantity: e.target.value ? parseInt(e.target.value) : undefined 
+                  onChange={(e) => setFormData({
+                    ...formData,
+                    reorder_quantity: e.target.value ? parseInt(e.target.value) : undefined
                   })}
                   placeholder="0"
                 />
@@ -336,6 +367,7 @@ export default function ProductDetailPage() {
                   <TableHead>Buying Price</TableHead>
                   <TableHead>Selling Price</TableHead>
                   <TableHead>Min Stock</TableHead>
+                  <TableHead>Reorder Qty</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -348,19 +380,20 @@ export default function ProductDetailPage() {
                       {variant.sku || '-'}
                     </TableCell>
                     <TableCell className="text-gray-900">
-                      {variant.buying_price ? `KES ${variant.buying_price.toLocaleString()}` : '-'}
+                      {variant.buying_price ? `KES ${Number(variant.buying_price).toLocaleString()}` : '-'}
                     </TableCell>
                     <TableCell className="text-gray-900 font-semibold">
-                      {variant.selling_price ? `KES ${variant.selling_price.toLocaleString()}` : '-'}
+                      {variant.selling_price ? `KES ${Number(variant.selling_price).toLocaleString()}` : '-'}
                     </TableCell>
                     <TableCell className="text-gray-600">
-                      {variant.min_stock_level || '-'}
+                      {variant.min_stock_level ?? '-'}
+                    </TableCell>
+                    <TableCell className="text-gray-600">
+                      {variant.reorder_quantity ?? '-'}
                     </TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                        variant.is_active 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
+                        variant.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
                       }`}>
                         {variant.is_active ? 'Active' : 'Inactive'}
                       </span>
