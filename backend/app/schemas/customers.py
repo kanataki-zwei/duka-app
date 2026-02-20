@@ -33,11 +33,13 @@ class CustomerTierUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     discount_percentage: Optional[float] = Field(None, ge=0, le=100)
     description: Optional[str] = None
+    is_active: Optional[bool] = None
 
 class CustomerTierResponse(CustomerTierBase):
     id: str
     company_id: str
     is_default: bool
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 

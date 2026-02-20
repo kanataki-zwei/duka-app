@@ -25,17 +25,18 @@ async def create_customer_tier(
             "name": tier_data.name,
             "discount_percentage": tier_data.discount_percentage,
             "description": tier_data.description,
-            "is_default": False  # Only the default tier can be is_default=True
+            "is_default": False,
+            "is_active": True
         }).execute()
-        
+
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Failed to create customer tier"
             )
-        
+
         return response.data[0]
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -63,9 +64,9 @@ async def get_customer_tiers(
             .order("is_default", desc=True)\
             .order("name")\
             .execute()
-        
+
         return response.data
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -86,15 +87,15 @@ async def get_customer_tier(
             .eq("id", tier_id)\
             .eq("company_id", company["id"])\
             .execute()
-        
+
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer tier not found"
             )
-        
+
         return response.data[0]
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -113,31 +114,49 @@ async def update_customer_tier(
 ):
     """Update a customer tier"""
     try:
+        # Fetch tier
+        tier_response = supabase.table("customer_tiers")\
+            .select("is_default")\
+            .eq("id", tier_id)\
+            .eq("company_id", company["id"])\
+            .execute()
+
+        if not tier_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Customer tier not found"
+            )
+
+        # Prevent deactivating the default tier
+        if tier_response.data[0]["is_default"] and tier_data.is_active is False:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot deactivate the default tier"
+            )
+
         update_data = tier_data.model_dump(exclude_unset=True)
-        
+        update_data.pop("is_default", None)
+
         if not update_data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No fields to update"
             )
-        
-        # Cannot modify is_default
-        update_data.pop("is_default", None)
-        
+
         response = supabase.table("customer_tiers")\
             .update(update_data)\
             .eq("id", tier_id)\
             .eq("company_id", company["id"])\
             .execute()
-        
+
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer tier not found"
             )
-        
+
         return response.data[0]
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -155,51 +174,49 @@ async def delete_customer_tier(
 ):
     """Delete a customer tier"""
     try:
-        # Check if tier is default
         tier_response = supabase.table("customer_tiers")\
             .select("is_default")\
             .eq("id", tier_id)\
             .eq("company_id", company["id"])\
             .execute()
-        
+
         if not tier_response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer tier not found"
             )
-        
+
         if tier_response.data[0]["is_default"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot delete the default tier"
             )
-        
-        # Check if any customers are using this tier
+
         customers_response = supabase.table("customers")\
             .select("id")\
             .eq("customer_tier_id", tier_id)\
             .execute()
-        
+
         if customers_response.data:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot delete tier. {len(customers_response.data)} customer(s) are using this tier"
             )
-        
+
         response = supabase.table("customer_tiers")\
             .delete()\
             .eq("id", tier_id)\
             .eq("company_id", company["id"])\
             .execute()
-        
+
         if not response.data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Customer tier not found"
             )
-        
+
         return None
-    
+
     except HTTPException:
         raise
     except Exception as e:

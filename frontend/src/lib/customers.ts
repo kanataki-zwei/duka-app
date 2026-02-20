@@ -23,6 +23,7 @@ export interface CustomerTier {
   discount_percentage: number;
   description: string | null;
   is_default: boolean;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -98,31 +99,26 @@ export interface CreditCheckResponse {
 // ==========================================
 
 export const customerTiersAPI = {
-  // Get all customer tiers
   getAll: async (): Promise<CustomerTier[]> => {
     const response = await apiClient.get<CustomerTier[]>('/customer-tiers');
     return response.data;
   },
 
-  // Get single customer tier
   getById: async (id: string): Promise<CustomerTier> => {
     const response = await apiClient.get<CustomerTier>(`/customer-tiers/${id}`);
     return response.data;
   },
 
-  // Create customer tier
   create: async (data: CustomerTierCreateRequest): Promise<CustomerTier> => {
     const response = await apiClient.post<CustomerTier>('/customer-tiers', data);
     return response.data;
   },
 
-  // Update customer tier
-  update: async (id: string, data: Partial<CustomerTierCreateRequest>): Promise<CustomerTier> => {
+  update: async (id: string, data: Partial<CustomerTierCreateRequest & { is_active: boolean }>): Promise<CustomerTier> => {
     const response = await apiClient.put<CustomerTier>(`/customer-tiers/${id}`, data);
     return response.data;
   },
 
-  // Delete customer tier
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/customer-tiers/${id}`);
   },
@@ -133,40 +129,35 @@ export const customerTiersAPI = {
 // ==========================================
 
 export const customersAPI = {
-  // Get all customers
   getAll: async (params?: {
     customer_type?: CustomerType;
     status_filter?: CustomerStatus;
     tier_id?: string;
+    search?: string;
   }): Promise<CustomerWithDetails[]> => {
     const response = await apiClient.get<CustomerWithDetails[]>('/customers', { params });
     return response.data;
   },
 
-  // Get single customer
   getById: async (id: string): Promise<CustomerWithDetails> => {
     const response = await apiClient.get<CustomerWithDetails>(`/customers/${id}`);
     return response.data;
   },
 
-  // Create customer
   create: async (data: CustomerCreateRequest): Promise<Customer> => {
     const response = await apiClient.post<Customer>('/customers', data);
     return response.data;
   },
 
-  // Update customer
   update: async (id: string, data: Partial<CustomerCreateRequest>): Promise<Customer> => {
     const response = await apiClient.put<Customer>(`/customers/${id}`, data);
     return response.data;
   },
 
-  // Delete customer (soft delete)
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/customers/${id}`);
   },
 
-  // Get customer balance
   getBalance: async (id: string): Promise<{
     customer_id: string;
     customer_name: string;
@@ -178,7 +169,6 @@ export const customersAPI = {
     return response.data;
   },
 
-  // Check customer credit
   checkCredit: async (id: string, data: CreditCheckRequest): Promise<CreditCheckResponse> => {
     const response = await apiClient.post<CreditCheckResponse>(`/customers/${id}/check-credit`, data);
     return response.data;

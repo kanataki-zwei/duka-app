@@ -13,6 +13,7 @@ from app.schemas.customers import (
 from app.api.deps import get_current_user, get_current_company
 from app.utils.supabase import get_supabase
 from supabase import Client
+from typing import List, Optional
 
 router = APIRouter()
 
@@ -99,9 +100,10 @@ async def get_customers(
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase),
-    customer_type: Optional[CustomerType] = Query(None, description="Filter by customer type"),
-    status_filter: Optional[CustomerStatus] = Query(None, description="Filter by status"),
-    tier_id: Optional[str] = Query(None, description="Filter by customer tier")
+    customer_type: Optional[CustomerType] = Query(None),
+    status_filter: Optional[CustomerStatus] = Query(None),
+    tier_id: Optional[str] = Query(None),
+    search: Optional[str] = Query(None, description="Search by customer name")
 ):
     """Get all customers for the company"""
     try:
@@ -110,31 +112,28 @@ async def get_customers(
             .eq("company_id", company["id"])\
             .order("is_default", desc=True)\
             .order("name")
-        
+
         if customer_type:
             query = query.eq("customer_type", customer_type.value)
-        
         if status_filter:
             query = query.eq("status", status_filter.value)
-        
         if tier_id:
             query = query.eq("customer_tier_id", tier_id)
-        
+        if search:
+            query = query.ilike("name", f"%{search}%")
+
         response = query.execute()
-        
+
         customers = []
         for customer in response.data:
-            # Extract nested data
             payment_term = customer.pop("payment_terms", None)
             customer_tier = customer.pop("customer_tiers", None)
-            
             customer["payment_term"] = payment_term
             customer["customer_tier"] = customer_tier
-            
             customers.append(customer)
-        
+
         return customers
-    
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

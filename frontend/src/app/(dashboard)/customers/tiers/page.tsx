@@ -8,7 +8,7 @@ import { customerTiersAPI, CustomerTier, CustomerTierCreateRequest } from '@/lib
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
-import { Plus, Edit2, Trash2, Award, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Award, Users, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function CustomerTiersPage() {
@@ -19,7 +19,6 @@ export default function CustomerTiersPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingTier, setEditingTier] = useState<CustomerTier | null>(null);
 
-  // Form state
   const [formData, setFormData] = useState<CustomerTierCreateRequest>({
     name: '',
     discount_percentage: 0,
@@ -41,7 +40,6 @@ export default function CustomerTiersPage() {
       setTiers(data);
     } catch (error: any) {
       toast.error('Failed to load customer tiers');
-      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -49,7 +47,6 @@ export default function CustomerTiersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       if (editingTier) {
         await customerTiersAPI.update(editingTier.id, formData);
@@ -58,7 +55,6 @@ export default function CustomerTiersPage() {
         await customerTiersAPI.create(formData);
         toast.success('Customer tier created successfully');
       }
-      
       resetForm();
       loadTiers();
     } catch (error: any) {
@@ -76,11 +72,20 @@ export default function CustomerTiersPage() {
     setShowCreateForm(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this tier?')) {
-      return;
+  const handleToggleActive = async (tier: CustomerTier) => {
+    const action = tier.is_active ? 'deactivate' : 'activate';
+    if (!confirm(`Are you sure you want to ${action} the "${tier.name}" tier?`)) return;
+    try {
+      await customerTiersAPI.update(tier.id, { is_active: !tier.is_active });
+      toast.success(`Tier ${action}d successfully`);
+      loadTiers();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || `Failed to ${action} tier`);
     }
+  };
 
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this tier?')) return;
     try {
       await customerTiersAPI.delete(id);
       toast.success('Customer tier deleted successfully');
@@ -93,16 +98,10 @@ export default function CustomerTiersPage() {
   const resetForm = () => {
     setShowCreateForm(false);
     setEditingTier(null);
-    setFormData({
-      name: '',
-      discount_percentage: 0,
-      description: '',
-    });
+    setFormData({ name: '', discount_percentage: 0, description: '' });
   };
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -126,10 +125,7 @@ export default function CustomerTiersPage() {
                   View Customers
                 </Button>
               </Link>
-              <Button
-                onClick={() => setShowCreateForm(true)}
-                className="flex items-center space-x-2"
-              >
+              <Button onClick={() => setShowCreateForm(true)} className="flex items-center space-x-2">
                 <Plus className="w-4 h-4" />
                 <span>Add Tier</span>
               </Button>
@@ -138,7 +134,6 @@ export default function CustomerTiersPage() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create/Edit Form */}
         {showCreateForm && (
@@ -155,7 +150,6 @@ export default function CustomerTiersPage() {
                   placeholder="e.g., VIP, Wholesale, Regular"
                   required
                 />
-
                 <Input
                   label="Discount Percentage *"
                   type="number"
@@ -168,7 +162,6 @@ export default function CustomerTiersPage() {
                   required
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-semibold text-gray-900 mb-2">
                   Description (Optional)
@@ -181,7 +174,6 @@ export default function CustomerTiersPage() {
                   className="w-full px-4 py-3 text-gray-900 text-base font-medium bg-white border-2 border-gray-300 rounded-lg placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
-
               <div className="flex space-x-3">
                 <Button type="submit">
                   {editingTier ? 'Update Tier' : 'Create Tier'}
@@ -219,7 +211,7 @@ export default function CustomerTiersPage() {
               </TableHeader>
               <TableBody>
                 {tiers.map((tier) => (
-                  <TableRow key={tier.id}>
+                  <TableRow key={tier.id} className={!tier.is_active ? 'opacity-60' : ''}>
                     <TableCell className="font-semibold">
                       {tier.name}
                       {tier.is_default && (
@@ -237,8 +229,12 @@ export default function CustomerTiersPage() {
                       {tier.description || '-'}
                     </TableCell>
                     <TableCell>
-                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
-                        Active
+                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                        tier.is_active
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {tier.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
@@ -251,13 +247,29 @@ export default function CustomerTiersPage() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         {!tier.is_default && (
-                          <button
-                            onClick={() => handleDelete(tier.id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleToggleActive(tier)}
+                              className={`p-2 rounded-lg transition-colors ${
+                                tier.is_active
+                                  ? 'text-orange-600 hover:bg-orange-50'
+                                  : 'text-green-600 hover:bg-green-50'
+                              }`}
+                              title={tier.is_active ? 'Deactivate' : 'Activate'}
+                            >
+                              {tier.is_active
+                                ? <ToggleRight className="w-4 h-4" />
+                                : <ToggleLeft className="w-4 h-4" />
+                              }
+                            </button>
+                            <button
+                              onClick={() => handleDelete(tier.id)}
+                              className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </TableCell>
