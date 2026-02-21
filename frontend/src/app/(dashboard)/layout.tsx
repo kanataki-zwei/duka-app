@@ -23,8 +23,9 @@ const navItems = [
   { name: 'Products', href: '/products/list', icon: Package },
   { name: 'Suppliers', href: '/suppliers/payment-terms', icon: Truck },
   { name: 'Inventory', href: '/inventory/locations', icon: Warehouse },
-  { name: 'Sales', href: '/sales', icon: ShoppingCart },
   { name: 'Customers', href: '/customers/list', icon: Users },
+  { name: 'Sales', href: '/sales', icon: ShoppingCart },
+  { name: 'Expenses', href: '/expenses', icon: ShoppingCart },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
 ];
 

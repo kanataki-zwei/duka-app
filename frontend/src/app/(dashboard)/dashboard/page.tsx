@@ -56,6 +56,15 @@ export default function DashboardPage() {
       isActive: true,
     },
     {
+      name: 'Client Management',
+      description: 'Manage customer relationships',
+      icon: Users,
+      lightColor: 'bg-pink-50',
+      textColor: 'text-pink-600',
+      href: '/customers/list',
+      isActive: true,
+    },
+    {
       name: 'Sales Records',
       description: 'Record and manage sales transactions',
       icon: ShoppingCart,
@@ -65,12 +74,12 @@ export default function DashboardPage() {
       isActive: true,
     },
     {
-      name: 'Client Management',
-      description: 'Manage customer relationships',
+      name: 'Business Expenses',
+      description: 'Manage business expenses',
       icon: Users,
       lightColor: 'bg-pink-50',
       textColor: 'text-pink-600',
-      href: '/customers/list',
+      href: '/expenses',
       isActive: true,
     },
     {
