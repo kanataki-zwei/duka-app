@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
 from datetime import date
+from decimal import Decimal
 from app.schemas.sales import (
     SaleCreate,
     SaleResponse,
@@ -18,6 +19,12 @@ from app.utils.pdf_generator import generate_invoice_pdf
 from supabase import Client
 
 router = APIRouter()
+
+
+def to_float(value) -> float:
+    """Convert Decimal to float for Supabase insertion"""
+    return float(value) if value is not None else None
+
 
 async def check_stock_availability(
     supabase: Client,
@@ -87,6 +94,7 @@ async def update_inventory_from_sale(
         "notes": f"{'Return from' if is_credit_note else 'Sale'} {sale_number}"
     }).execute()
 
+
 @router.post("/", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
 async def create_sale(
     sale_data: SaleCreate,
@@ -111,7 +119,7 @@ async def create_sale(
         
         customer = customer_response.data[0]
         customer_tier = customer.pop("customer_tiers", None)
-        tier_discount = customer_tier["discount_percentage"] if customer_tier else 0
+        tier_discount = Decimal(str(customer_tier["discount_percentage"])) if customer_tier else Decimal("0")
         
         # Validate storage location
         location_response = supabase.table("storage_locations")\
@@ -149,21 +157,21 @@ async def create_sale(
                         detail=f"Insufficient stock for {variant_name}"
                     )
         
-        # Calculate totals
-        subtotal = 0
+        # Calculate totals using Decimal for precision
+        subtotal = Decimal("0")
         for item in sale_data.items:
-            item_subtotal = item.quantity * item.unit_price
+            item_subtotal = Decimal(str(item.quantity)) * item.unit_price
             subtotal += item_subtotal
         
         discount_percentage = tier_discount
-        discount_amount = (subtotal * discount_percentage) / 100
+        discount_amount = (subtotal * discount_percentage) / Decimal("100")
         total_amount = subtotal - discount_amount
         
         # Check credit limit (skip for walk-in customers)
         if customer["customer_type"] != "walk-in":
-            new_balance = customer["current_balance"] + total_amount
-            if new_balance > customer["credit_limit"]:
-                available_credit = customer["credit_limit"] - customer["current_balance"]
+            new_balance = Decimal(str(customer["current_balance"])) + total_amount
+            if new_balance > Decimal(str(customer["credit_limit"])):
+                available_credit = Decimal(str(customer["credit_limit"])) - Decimal(str(customer["current_balance"]))
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Credit limit exceeded. Available credit: KES {available_credit:,.2f}"
@@ -186,13 +194,13 @@ async def create_sale(
             "original_sale_id": sale_data.original_sale_id,
             "sale_date": sale_data.sale_date.isoformat(),
             "storage_location_id": sale_data.storage_location_id,
-            "subtotal": subtotal,
-            "discount_percentage": discount_percentage,
-            "discount_amount": discount_amount,
-            "total_amount": total_amount,
+            "subtotal": to_float(subtotal),
+            "discount_percentage": to_float(discount_percentage),
+            "discount_amount": to_float(discount_amount),
+            "total_amount": to_float(total_amount),
             "payment_status": "unpaid",
             "amount_paid": 0,
-            "amount_due": total_amount,
+            "amount_due": to_float(total_amount),
             "notes": sale_data.notes,
             "created_by": current_user.get("id") if isinstance(current_user, dict) else None
         }).execute()
@@ -208,17 +216,17 @@ async def create_sale(
         
         # Create sale items and update inventory
         for item in sale_data.items:
-            item_discount_amount = (item.quantity * item.unit_price * discount_percentage) / 100
-            line_total = (item.quantity * item.unit_price) - item_discount_amount
+            item_discount_amount = (Decimal(str(item.quantity)) * item.unit_price * discount_percentage) / Decimal("100")
+            line_total = (Decimal(str(item.quantity)) * item.unit_price) - item_discount_amount
             
             supabase.table("sale_items").insert({
                 "sale_id": sale_id,
                 "product_variant_id": item.product_variant_id,
                 "quantity": item.quantity,
-                "unit_price": item.unit_price,
-                "discount_percentage": discount_percentage,
-                "discount_amount": item_discount_amount,
-                "line_total": line_total
+                "unit_price": to_float(item.unit_price),
+                "discount_percentage": to_float(discount_percentage),
+                "discount_amount": to_float(item_discount_amount),
+                "line_total": to_float(line_total)
             }).execute()
             
             await update_inventory_from_sale(
@@ -232,9 +240,9 @@ async def create_sale(
             )
         
         # Update customer balance
-        new_customer_balance = customer["current_balance"] + total_amount
+        new_customer_balance = Decimal(str(customer["current_balance"])) + total_amount
         supabase.table("customers")\
-            .update({"current_balance": new_customer_balance})\
+            .update({"current_balance": to_float(new_customer_balance)})\
             .eq("id", sale_data.customer_id)\
             .execute()
         
@@ -247,6 +255,7 @@ async def create_sale(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.get("/", response_model=List[SaleWithDetails])
 async def get_sales(
@@ -326,6 +335,7 @@ async def get_sales(
             detail=str(e)
         )
 
+
 @router.get("/{sale_id}/pdf")
 async def download_sale_pdf(
     sale_id: str,
@@ -399,6 +409,7 @@ async def download_sale_pdf(
             detail=str(e)
         )
 
+
 @router.get("/{sale_id}", response_model=SaleWithDetails)
 async def get_sale(
     sale_id: str,
@@ -460,6 +471,7 @@ async def get_sale(
             detail=str(e)
         )
 
+
 @router.post("/credit-notes/", response_model=SaleResponse, status_code=status.HTTP_201_CREATED)
 async def create_credit_note(
     credit_note_data: CreditNoteCreate,
@@ -501,7 +513,7 @@ async def create_credit_note(
         original_items = {item["id"]: item for item in original_items_response.data}
         
         # Validate return quantities and build credit note items
-        subtotal = 0
+        subtotal = Decimal("0")
         credit_note_items = []
         
         for return_item in credit_note_data.items:
@@ -520,9 +532,8 @@ async def create_credit_note(
                 )
             
             # Use effective unit price (already discounted) from original sale item
-            # This ensures the credit note reflects what the customer actually paid
-            effective_unit_price = original_item["line_total"] / original_item["quantity"]
-            item_subtotal = -(return_item.return_quantity * effective_unit_price)
+            effective_unit_price = Decimal(str(original_item["line_total"])) / Decimal(str(original_item["quantity"]))
+            item_subtotal = -(Decimal(str(return_item.return_quantity)) * effective_unit_price)
             subtotal += item_subtotal
             
             credit_note_items.append({
@@ -533,8 +544,6 @@ async def create_credit_note(
             })
         
         # No additional discount — effective unit price already reflects discounted price
-        discount_percentage = 0
-        discount_amount = 0
         total_amount = subtotal
         
         # Generate credit note number
@@ -554,13 +563,13 @@ async def create_credit_note(
             "original_sale_id": credit_note_data.original_sale_id,
             "sale_date": credit_note_data.sale_date.isoformat(),
             "storage_location_id": original_sale["storage_location_id"],
-            "subtotal": subtotal,
-            "discount_percentage": discount_percentage,
-            "discount_amount": discount_amount,
-            "total_amount": total_amount,
+            "subtotal": to_float(subtotal),
+            "discount_percentage": 0,
+            "discount_amount": 0,
+            "total_amount": to_float(total_amount),
             "payment_status": "unpaid",
             "amount_paid": 0,
-            "amount_due": total_amount,
+            "amount_due": to_float(total_amount),
             "notes": credit_note_data.notes,
             "created_by": current_user.get("id") if isinstance(current_user, dict) else None
         }).execute()
@@ -576,17 +585,16 @@ async def create_credit_note(
         
         # Create credit note items and update inventory
         for item in credit_note_items:
-            # No discount — unit price is already the effective discounted price
-            line_total = item["quantity"] * item["unit_price"]
+            line_total = Decimal(str(item["quantity"])) * item["unit_price"]
             
             supabase.table("sale_items").insert({
                 "sale_id": credit_note_id,
                 "product_variant_id": item["product_variant_id"],
                 "quantity": item["quantity"],
-                "unit_price": item["unit_price"],
+                "unit_price": to_float(item["unit_price"]),
                 "discount_percentage": 0,
                 "discount_amount": 0,
-                "line_total": line_total
+                "line_total": to_float(line_total)
             }).execute()
             
             await update_inventory_from_sale(
@@ -601,9 +609,9 @@ async def create_credit_note(
             )
         
         # Update customer balance (decrease by credit note amount — which is negative)
-        new_customer_balance = customer["current_balance"] + total_amount
+        new_customer_balance = Decimal(str(customer["current_balance"])) + total_amount
         supabase.table("customers")\
-            .update({"current_balance": new_customer_balance})\
+            .update({"current_balance": to_float(new_customer_balance)})\
             .eq("id", original_sale["customer_id"])\
             .execute()
         
@@ -616,6 +624,7 @@ async def create_credit_note(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.post("/payments/", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def record_payment(
@@ -653,7 +662,7 @@ async def record_payment(
         sale = sale_response.data[0]
         customer = sale.pop("customers", None)
         
-        if payment_data.amount > sale["amount_due"]:
+        if payment_data.amount > Decimal(str(sale["amount_due"])):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Payment amount (KES {payment_data.amount:,.2f}) exceeds amount due (KES {sale['amount_due']:,.2f})"
@@ -662,7 +671,7 @@ async def record_payment(
         payment_response = supabase.table("sale_payments").insert({
             "sale_id": payment_data.sale_id,
             "payment_date": payment_data.payment_date.isoformat(),
-            "amount": payment_data.amount,
+            "amount": to_float(payment_data.amount),
             "payment_method": payment_data.payment_method.value,
             "reference_number": payment_data.reference_number,
             "notes": payment_data.notes,
@@ -675,8 +684,8 @@ async def record_payment(
                 detail="Failed to create payment"
             )
         
-        new_amount_paid = sale["amount_paid"] + payment_data.amount
-        new_amount_due = sale["amount_due"] - payment_data.amount
+        new_amount_paid = Decimal(str(sale["amount_paid"])) + payment_data.amount
+        new_amount_due = Decimal(str(sale["amount_due"])) - payment_data.amount
         
         if new_amount_due <= 0:
             new_payment_status = "paid"
@@ -687,17 +696,17 @@ async def record_payment(
         
         supabase.table("sales")\
             .update({
-                "amount_paid": new_amount_paid,
-                "amount_due": new_amount_due,
+                "amount_paid": to_float(new_amount_paid),
+                "amount_due": to_float(new_amount_due),
                 "payment_status": new_payment_status
             })\
             .eq("id", payment_data.sale_id)\
             .execute()
         
         # Update customer balance (decrease by payment amount)
-        new_customer_balance = customer["current_balance"] - payment_data.amount
+        new_customer_balance = Decimal(str(customer["current_balance"])) - payment_data.amount
         supabase.table("customers")\
-            .update({"current_balance": new_customer_balance})\
+            .update({"current_balance": to_float(new_customer_balance)})\
             .eq("id", sale["customer_id"])\
             .execute()
         
@@ -706,8 +715,8 @@ async def record_payment(
             "payment": payment_response.data[0],
             "updated_sale": {
                 "payment_status": new_payment_status,
-                "amount_paid": new_amount_paid,
-                "amount_due": new_amount_due
+                "amount_paid": to_float(new_amount_paid),
+                "amount_due": to_float(new_amount_due)
             }
         }
     
@@ -718,6 +727,7 @@ async def record_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.get("/payments/{sale_id}/", response_model=List[SalePaymentResponse])
 async def get_sale_payments(

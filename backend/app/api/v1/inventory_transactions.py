@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
+from decimal import Decimal
 from app.schemas.inventory import (
     InventoryTransactionCreate,
     InventoryTransactionResponse,
@@ -13,6 +14,12 @@ from supabase import Client
 
 router = APIRouter()
 
+
+def to_float(value) -> float:
+    """Convert Decimal to float for Supabase insertion"""
+    return float(value) if value is not None else None
+
+
 async def update_inventory_quantity(
     supabase: Client,
     company_id: str,
@@ -21,7 +28,6 @@ async def update_inventory_quantity(
     quantity_change: int
 ):
     """Helper function to update inventory quantity"""
-    # Get or create inventory item
     item_response = supabase.table("inventory_items")\
         .select("*")\
         .eq("product_variant_id", variant_id)\
@@ -29,7 +35,6 @@ async def update_inventory_quantity(
         .execute()
     
     if item_response.data:
-        # Update existing
         current_qty = item_response.data[0]["quantity"]
         new_qty = current_qty + quantity_change
         
@@ -44,7 +49,6 @@ async def update_inventory_quantity(
             .eq("id", item_response.data[0]["id"])\
             .execute()
     else:
-        # Create new
         if quantity_change < 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -58,6 +62,7 @@ async def update_inventory_quantity(
             "quantity": quantity_change
         }).execute()
 
+
 @router.post("/", response_model=InventoryTransactionResponse, status_code=status.HTTP_201_CREATED)
 async def create_inventory_transaction(
     transaction_data: InventoryTransactionCreate,
@@ -67,7 +72,6 @@ async def create_inventory_transaction(
 ):
     """Create a new inventory transaction and update stock levels"""
     try:
-        
         # Verify variant exists
         variant_response = supabase.table("product_variants")\
             .select("id")\
@@ -95,16 +99,17 @@ async def create_inventory_transaction(
                     detail="Supplier not found"
                 )
         
-        # Calculate total_cost if unit_cost is provided
+        # Calculate total_cost and amount_due using Decimal for precision
         total_cost = None
         if transaction_data.unit_cost:
-            total_cost = float(transaction_data.unit_cost) * transaction_data.quantity
+            total_cost = transaction_data.unit_cost * Decimal(str(transaction_data.quantity))
         
-        # Calculate amount_due
         amount_due = None
-        if total_cost and transaction_data.amount_paid is not None:
-            amount_due = total_cost - float(transaction_data.amount_paid)
-        
+        if total_cost is not None and transaction_data.amount_paid is not None:
+            amount_due = total_cost - transaction_data.amount_paid
+        elif total_cost is not None:
+            amount_due = total_cost
+
         # Validate transaction based on type
         if transaction_data.transaction_type == TransactionType.stock_in:
             if not transaction_data.to_location_id:
@@ -112,10 +117,9 @@ async def create_inventory_transaction(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="to_location_id is required for stock in"
                 )
-            # Update inventory
             await update_inventory_quantity(
-                supabase, 
-                company["id"], 
+                supabase,
+                company["id"],
                 transaction_data.product_variant_id,
                 transaction_data.to_location_id,
                 transaction_data.quantity
@@ -127,7 +131,6 @@ async def create_inventory_transaction(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="from_location_id is required for stock out"
                 )
-            # Update inventory
             await update_inventory_quantity(
                 supabase,
                 company["id"],
@@ -142,7 +145,6 @@ async def create_inventory_transaction(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Both from_location_id and to_location_id are required for transfer"
                 )
-            # Remove from source
             await update_inventory_quantity(
                 supabase,
                 company["id"],
@@ -150,7 +152,6 @@ async def create_inventory_transaction(
                 transaction_data.from_location_id,
                 -transaction_data.quantity
             )
-            # Add to destination
             await update_inventory_quantity(
                 supabase,
                 company["id"],
@@ -166,7 +167,6 @@ async def create_inventory_transaction(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Either from_location_id or to_location_id is required for adjustment"
                 )
-            # Adjustment can be positive or negative - handled by update function
             if transaction_data.to_location_id:
                 await update_inventory_quantity(
                     supabase,
@@ -196,13 +196,12 @@ async def create_inventory_transaction(
             "reference_id": transaction_data.reference_id,
             "notes": transaction_data.notes,
             "created_by": current_user.get("id") if isinstance(current_user, dict) else None,
-            # New fields for supplier and payment tracking
             "supplier_id": transaction_data.supplier_id,
-            "unit_cost": float(transaction_data.unit_cost) if transaction_data.unit_cost else None,
-            "total_cost": total_cost,
-            "payment_status": transaction_data.payment_status if transaction_data.payment_status else "unpaid",  # Changed
-            "amount_paid": float(transaction_data.amount_paid) if transaction_data.amount_paid is not None else 0,  # Changed
-            "amount_due": amount_due
+            "unit_cost": to_float(transaction_data.unit_cost),
+            "total_cost": to_float(total_cost),
+            "payment_status": transaction_data.payment_status if transaction_data.payment_status else "unpaid",
+            "amount_paid": to_float(transaction_data.amount_paid) if transaction_data.amount_paid is not None else 0,
+            "amount_due": to_float(amount_due)
         }).execute()
         
         if not response.data:
@@ -220,6 +219,7 @@ async def create_inventory_transaction(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.get("/", response_model=List[InventoryTransactionWithDetails])
 async def get_inventory_transactions(
@@ -252,7 +252,6 @@ async def get_inventory_transactions(
         
         transactions = []
         for txn in response.data:
-            # Extract nested data
             variant_data = txn.pop("product_variants", None)
             from_loc = txn.pop("from_location", None)
             to_loc = txn.pop("to_location", None)
@@ -273,6 +272,7 @@ async def get_inventory_transactions(
             detail=str(e)
         )
 
+
 @router.post("/adjust", response_model=InventoryTransactionResponse)
 async def adjust_stock(
     adjustment: StockAdjustment,
@@ -282,7 +282,6 @@ async def adjust_stock(
 ):
     """Simple stock adjustment endpoint"""
     try:
-        # Update inventory
         await update_inventory_quantity(
             supabase,
             company["id"],
@@ -291,7 +290,6 @@ async def adjust_stock(
             adjustment.quantity_change
         )
         
-        # Create transaction
         response = supabase.table("inventory_transactions").insert({
             "company_id": company["id"],
             "product_variant_id": adjustment.product_variant_id,
@@ -313,6 +311,7 @@ async def adjust_stock(
             detail=str(e)
         )
 
+
 @router.post("/{transaction_id}/reverse", response_model=InventoryTransactionResponse)
 async def reverse_transaction(
     transaction_id: str,
@@ -322,7 +321,6 @@ async def reverse_transaction(
 ):
     """Reverse a transaction by creating an opposite transaction"""
     try:
-        # Get original transaction
         original_response = supabase.table("inventory_transactions")\
             .select("*")\
             .eq("id", transaction_id)\
@@ -337,7 +335,6 @@ async def reverse_transaction(
         
         original = original_response.data[0]
         
-        # Check if already reversed
         reversal_check = supabase.table("inventory_transactions")\
             .select("id")\
             .eq("reference_type", "reversal")\
@@ -350,12 +347,10 @@ async def reverse_transaction(
                 detail="Transaction already reversed"
             )
         
-        # Create reverse transaction based on type
         reverse_type = original["transaction_type"]
         reverse_from = original["to_location_id"]
         reverse_to = original["from_location_id"]
         
-        # For in/out, flip the type
         if original["transaction_type"] == "in":
             reverse_type = "out"
             reverse_from = original["to_location_id"]
@@ -365,7 +360,6 @@ async def reverse_transaction(
             reverse_from = None
             reverse_to = original["from_location_id"]
         
-        # Update inventory based on reverse type
         if reverse_type == "in":
             await update_inventory_quantity(
                 supabase,
@@ -383,7 +377,6 @@ async def reverse_transaction(
                 -original["quantity"]
             )
         elif reverse_type == "transfer":
-            # Reverse transfer
             await update_inventory_quantity(
                 supabase,
                 company["id"],
@@ -399,7 +392,6 @@ async def reverse_transaction(
                 -original["quantity"]
             )
         
-        # Create reversal transaction
         response = supabase.table("inventory_transactions").insert({
             "company_id": company["id"],
             "product_variant_id": original["product_variant_id"],

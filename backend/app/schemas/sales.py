@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, date
+from decimal import Decimal
 from enum import Enum
 
 # ==========================================
@@ -29,8 +30,8 @@ class PaymentMethod(str, Enum):
 class SaleItemBase(BaseModel):
     product_variant_id: str
     quantity: int = Field(..., description="Positive for invoices, negative for credit notes")
-    unit_price: float = Field(..., ge=0)
-    discount_percentage: float = Field(default=0, ge=0, le=100)
+    unit_price: Decimal = Field(..., ge=0)
+    discount_percentage: Decimal = Field(default=0, ge=0, le=100)
 
 class SaleItemCreate(SaleItemBase):
     pass
@@ -38,8 +39,8 @@ class SaleItemCreate(SaleItemBase):
 class SaleItemResponse(SaleItemBase):
     id: str
     sale_id: str
-    discount_amount: float
-    line_total: float
+    discount_amount: Decimal
+    line_total: Decimal
     created_at: datetime
 
     class Config:
@@ -65,13 +66,13 @@ class SaleResponse(SaleBase):
     sale_number: str
     sale_type: SaleType
     original_sale_id: Optional[str] = None
-    subtotal: float
-    discount_percentage: float
-    discount_amount: float
-    total_amount: float
+    subtotal: Decimal
+    discount_percentage: Decimal
+    discount_amount: Decimal
+    total_amount: Decimal
     payment_status: PaymentStatus
-    amount_paid: float
-    amount_due: float
+    amount_paid: Decimal
+    amount_due: Decimal
     created_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -93,7 +94,7 @@ class SaleWithDetails(SaleResponse):
 class SalePaymentBase(BaseModel):
     sale_id: str
     payment_date: date = Field(default_factory=date.today)
-    amount: float = Field(..., gt=0)
+    amount: Decimal = Field(..., gt=0)
     payment_method: PaymentMethod
     reference_number: Optional[str] = None
     notes: Optional[str] = None
@@ -114,7 +115,7 @@ class SalePaymentResponse(SalePaymentBase):
 # ==========================================
 
 class CreditNoteItemBase(BaseModel):
-    sale_item_id: str  # Reference to original sale item
+    sale_item_id: str
     return_quantity: int = Field(..., gt=0)
 
 class CreditNoteCreate(BaseModel):

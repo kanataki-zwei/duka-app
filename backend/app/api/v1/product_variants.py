@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
+from decimal import Decimal
 from app.schemas.products import (
     ProductVariantCreate,
     ProductVariantUpdate,
@@ -10,6 +11,12 @@ from app.utils.supabase import get_supabase
 from supabase import Client
 
 router = APIRouter()
+
+
+def to_float(value) -> float:
+    """Convert Decimal to float for Supabase insertion"""
+    return float(value) if value is not None else None
+
 
 @router.get("/generate-sku", response_model=dict)
 async def get_generated_variant_sku(
@@ -25,6 +32,7 @@ async def get_generated_variant_sku(
     count = len(response.data) + 1 if response.data else 1
     sku = f"VAR-{count:04d}"
     return {"sku": sku}
+
 
 @router.post("/", response_model=ProductVariantResponse, status_code=status.HTTP_201_CREATED)
 async def create_product_variant(
@@ -54,8 +62,8 @@ async def create_product_variant(
             "product_id": variant_data.product_id,
             "variant_name": variant_data.variant_name,
             "sku": variant_data.sku,
-            "buying_price": str(variant_data.buying_price) if variant_data.buying_price else None,
-            "selling_price": str(variant_data.selling_price) if variant_data.selling_price else None,
+            "buying_price": to_float(variant_data.buying_price),
+            "selling_price": to_float(variant_data.selling_price),
             "min_stock_level": variant_data.min_stock_level,
             "reorder_quantity": variant_data.reorder_quantity
         }).execute()
@@ -80,6 +88,7 @@ async def create_product_variant(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.get("/", response_model=List[ProductVariantResponse])
 async def get_product_variants(
@@ -112,6 +121,7 @@ async def get_product_variants(
             detail=str(e)
         )
 
+
 @router.get("/{variant_id}", response_model=ProductVariantResponse)
 async def get_product_variant(
     variant_id: str,
@@ -143,6 +153,7 @@ async def get_product_variant(
             detail=str(e)
         )
 
+
 @router.put("/{variant_id}", response_model=ProductVariantResponse)
 async def update_product_variant(
     variant_id: str,
@@ -153,13 +164,11 @@ async def update_product_variant(
 ):
     """Update a product variant"""
     try:
-        # Build update data
         update_data = {}
         for field, value in variant_data.model_dump(exclude_unset=True).items():
             if value is not None:
-                # Convert Decimal to string for database
                 if field in ['buying_price', 'selling_price']:
-                    update_data[field] = str(value)
+                    update_data[field] = to_float(value)
                 else:
                     update_data[field] = value
         
@@ -195,6 +204,7 @@ async def update_product_variant(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.delete("/{variant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product_variant(
