@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import ORJSONResponse
 from app.core.config import settings
 from app.api.v1 import (
     auth, 
@@ -14,14 +15,17 @@ from app.api.v1 import (
     customer_tiers,  
     customers,  
     sales,
-    analytics
+    analytics,
+    expense_categories,
+    expenses
 )
 
 # Create FastAPI app
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",
-    debug=settings.DEBUG
+    debug=settings.DEBUG,
+    default_response_class=ORJSONResponse
 )
 
 # Configure CORS
@@ -47,7 +51,8 @@ app.include_router(customer_tiers.router, prefix=f"{settings.API_V1_PREFIX}/cust
 app.include_router(customers.router, prefix=f"{settings.API_V1_PREFIX}/customers", tags=["Customers"])  
 app.include_router(sales.router, prefix=f"{settings.API_V1_PREFIX}/sales", tags=["Sales"])
 app.include_router(analytics.router, prefix=f"{settings.API_V1_PREFIX}/analytics", tags=["Analytics"])
-
+app.include_router(expense_categories.router, prefix=f"{settings.API_V1_PREFIX}/expense-categories", tags=["Expense Categories"])
+app.include_router(expenses.router, prefix=f"{settings.API_V1_PREFIX}/expenses", tags=["Expenses"])
 @app.get("/")
 async def root():
     return {
