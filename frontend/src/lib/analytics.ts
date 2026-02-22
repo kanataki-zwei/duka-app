@@ -34,6 +34,14 @@ export interface SalesByPeriod {
   year_invoice_count: number;
 }
 
+export interface CreditNotesByPeriod {
+  company_id: string;
+  today_returns: number;
+  week_returns: number;
+  month_returns: number;
+  year_returns: number;
+}
+
 export interface DailySalesTrend {
   company_id: string;
   sale_date: string;
@@ -50,18 +58,6 @@ export interface InventorySummary {
   total_inventory_value_cost: number;
   total_inventory_value_retail: number;
   potential_profit: number;
-}
-
-export interface InventoryPaymentStatus {
-  company_id: string;
-  paid_stock_transactions: number;
-  paid_stock_value: number;
-  unpaid_stock_transactions: number;
-  unpaid_stock_value: number;
-  partial_stock_transactions: number;
-  partial_stock_value: number;
-  partial_amount_paid: number;
-  total_outstanding: number;
 }
 
 export interface LowStockAlert {
@@ -114,15 +110,94 @@ export interface PaymentCollectionRate {
   collection_rate_percentage: number;
 }
 
+export interface ExpenseSummary {
+  company_id: string;
+  total_standard_expenses: number;
+  total_standard_amount: number;
+  total_sales_expenses: number;
+  total_sales_amount: number;
+  total_expenses: number;
+  total_amount: number;
+  total_paid: number;
+  total_outstanding: number;
+  unpaid_count: number;
+  unpaid_amount: number;
+  partial_count: number;
+  partial_outstanding: number;
+  paid_count: number;
+  paid_amount: number;
+}
+
+export interface ExpensesByPeriod {
+  company_id: string;
+  today_expenses: number;
+  today_count: number;
+  week_expenses: number;
+  week_count: number;
+  month_expenses: number;
+  month_count: number;
+  year_expenses: number;
+  year_count: number;
+}
+
+export interface ExpensesByCategory {
+  company_id: string;
+  category_id: string;
+  category_name: string;
+  expense_type: string;
+  expense_count: number;
+  total_amount: number;
+  total_paid: number;
+  total_outstanding: number;
+}
+
+export interface OutgoingPaymentsSummary {
+  company_id: string;
+  inventory_outstanding: number;
+  inventory_paid_this_month: number;
+}
+
+export interface OutgoingExpensePayments {
+  company_id: string;
+  expense_outstanding: number;
+  expense_paid_this_month: number;
+}
+
+export interface CreditNoteRefunds {
+  company_id: string;
+  refunds_outstanding: number;
+  refunds_paid_this_month: number;
+}
+
+export interface IncomingPaymentsSummary {
+  company_id: string;
+  unpaid_invoice_count: number;
+  unpaid_invoice_amount: number;
+  partial_invoice_count: number;
+  partial_invoice_amount: number;
+  total_pending_incoming: number;
+}
+
 export interface DashboardSummary {
-  sales_overview: SalesOverview | null;
+  // Row 1 - Sales
   sales_by_period: SalesByPeriod | null;
+  credit_notes_by_period: CreditNotesByPeriod | null;
+  // Row 2 - Expenses
+  expenses_by_period: ExpensesByPeriod | null;
+  // Row 3 - Outgoing payments
+  outgoing_inventory: OutgoingPaymentsSummary | null;
+  outgoing_expenses: OutgoingExpensePayments | null;
+  outgoing_credit_notes: CreditNoteRefunds | null;
+  // Row 4 - Incoming payments
+  incoming_payments: IncomingPaymentsSummary | null;
+  // Supporting data
+  sales_overview: SalesOverview | null;
   inventory_summary: InventorySummary | null;
-  inventory_payment_status: InventoryPaymentStatus | null;
   low_stock_count: number;
   top_customers: TopCustomer[];
   top_products: TopSellingProduct[];
   payment_collection_rate: PaymentCollectionRate | null;
+  expense_summary: ExpenseSummary | null;
 }
 
 // ==========================================
@@ -130,65 +205,72 @@ export interface DashboardSummary {
 // ==========================================
 
 export const analyticsAPI = {
-  // Dashboard
   getDashboard: async (): Promise<DashboardSummary> => {
     const response = await apiClient.get<DashboardSummary>('/analytics/dashboard/');
     return response.data;
   },
-
-  // Sales Analytics
   getSalesOverview: async (): Promise<SalesOverview> => {
     const response = await apiClient.get<SalesOverview>('/analytics/sales/overview/');
     return response.data;
   },
-
   getSalesByPeriod: async (): Promise<SalesByPeriod> => {
     const response = await apiClient.get<SalesByPeriod>('/analytics/sales/by-period/');
     return response.data;
   },
-
-  getDailySalesTrend: async (days: number = 30): Promise<DailySalesTrend[]> => {
-    const response = await apiClient.get<DailySalesTrend[]>('/analytics/sales/daily-trend/', {
-      params: { days }
-    });
+  getCreditNotesByPeriod: async (): Promise<CreditNotesByPeriod> => {
+    const response = await apiClient.get<CreditNotesByPeriod>('/analytics/sales/credit-notes-by-period/');
     return response.data;
   },
-
-  // Inventory Analytics
+  getDailySalesTrend: async (days: number = 30): Promise<DailySalesTrend[]> => {
+    const response = await apiClient.get<DailySalesTrend[]>('/analytics/sales/daily-trend/', { params: { days } });
+    return response.data;
+  },
   getInventorySummary: async (): Promise<InventorySummary> => {
     const response = await apiClient.get<InventorySummary>('/analytics/inventory/summary/');
     return response.data;
   },
-
-  getInventoryPaymentStatus: async (): Promise<InventoryPaymentStatus> => {
-    const response = await apiClient.get<InventoryPaymentStatus>('/analytics/inventory/payment-status/');
-    return response.data;
-  },
-
   getLowStockAlerts: async (): Promise<LowStockAlert[]> => {
     const response = await apiClient.get<LowStockAlert[]>('/analytics/inventory/low-stock/');
     return response.data;
   },
-
-  // Customer Analytics
   getTopCustomers: async (limit: number = 10): Promise<TopCustomer[]> => {
-    const response = await apiClient.get<TopCustomer[]>('/analytics/customers/top-customers/', {
-      params: { limit }
-    });
+    const response = await apiClient.get<TopCustomer[]>('/analytics/customers/top-customers/', { params: { limit } });
     return response.data;
   },
-
-  // Product Analytics
   getTopProducts: async (limit: number = 10): Promise<TopSellingProduct[]> => {
-    const response = await apiClient.get<TopSellingProduct[]>('/analytics/products/top-selling/', {
-      params: { limit }
-    });
+    const response = await apiClient.get<TopSellingProduct[]>('/analytics/products/top-selling/', { params: { limit } });
     return response.data;
   },
-
-  // Payment Analytics
   getPaymentCollectionRate: async (): Promise<PaymentCollectionRate> => {
     const response = await apiClient.get<PaymentCollectionRate>('/analytics/payments/collection-rate/');
+    return response.data;
+  },
+  getExpenseSummary: async (): Promise<ExpenseSummary> => {
+    const response = await apiClient.get<ExpenseSummary>('/analytics/expenses/summary/');
+    return response.data;
+  },
+  getExpensesByPeriod: async (): Promise<ExpensesByPeriod> => {
+    const response = await apiClient.get<ExpensesByPeriod>('/analytics/expenses/by-period/');
+    return response.data;
+  },
+  getExpensesByCategory: async (): Promise<ExpensesByCategory[]> => {
+    const response = await apiClient.get<ExpensesByCategory[]>('/analytics/expenses/by-category/');
+    return response.data;
+  },
+  getOutgoingInventoryPayments: async (): Promise<OutgoingPaymentsSummary> => {
+    const response = await apiClient.get<OutgoingPaymentsSummary>('/analytics/payments/outgoing-inventory/');
+    return response.data;
+  },
+  getOutgoingExpensePayments: async (): Promise<OutgoingExpensePayments> => {
+    const response = await apiClient.get<OutgoingExpensePayments>('/analytics/payments/outgoing-expenses/');
+    return response.data;
+  },
+  getCreditNoteRefunds: async (): Promise<CreditNoteRefunds> => {
+    const response = await apiClient.get<CreditNoteRefunds>('/analytics/payments/credit-note-refunds/');
+    return response.data;
+  },
+  getIncomingPayments: async (): Promise<IncomingPaymentsSummary> => {
+    const response = await apiClient.get<IncomingPaymentsSummary>('/analytics/payments/incoming/');
     return response.data;
   },
 };
