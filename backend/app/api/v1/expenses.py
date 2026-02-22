@@ -12,7 +12,7 @@ from app.schemas.expenses import (
     ExpenseType,
     ExpensePaymentStatus
 )
-from app.api.deps import get_current_user, get_current_company
+from app.api.deps import get_current_user, get_current_company, get_current_role
 from app.utils.supabase import get_supabase
 from supabase import Client
 
@@ -22,6 +22,15 @@ router = APIRouter()
 def to_float(value) -> float:
     """Convert Decimal to float for Supabase insertion"""
     return float(value) if value is not None else None
+
+
+def require_admin_for_standard(expense_type: ExpenseType, role: str):
+    """Raise 403 if a shop_attendant tries to access standard expenses"""
+    if role != "admin" and expense_type == ExpenseType.standard:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: standard expenses are restricted to admin users"
+        )
 
 
 def generate_recurring_dates(
@@ -80,11 +89,13 @@ async def create_expense(
     expense_data: ExpenseCreate,
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
+    role: str = Depends(get_current_role),
     supabase: Client = Depends(get_supabase)
 ):
-    """Create a new expense, with optional recurring schedule"""
+    """Create a new expense"""
+    require_admin_for_standard(expense_data.expense_type, role)
+
     try:
-        # Validate category exists and matches expense type
         category_response = supabase.table("expense_categories")\
             .select("id, expense_type")\
             .eq("id", expense_data.expense_category_id)\
@@ -105,14 +116,12 @@ async def create_expense(
                 detail=f"Category is for {category['expense_type']} expenses, not {expense_data.expense_type.value}"
             )
 
-        # Validate sales expense has a sale_id
         if expense_data.expense_type == ExpenseType.sales and not expense_data.sale_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Sales expenses must be linked to a sale"
             )
 
-        # Validate supplier if provided
         if expense_data.supplier_id:
             supplier_response = supabase.table("suppliers")\
                 .select("id")\
@@ -126,7 +135,6 @@ async def create_expense(
                     detail="Supplier not found"
                 )
 
-        # Validate sale if provided
         if expense_data.sale_id:
             sale_response = supabase.table("sales")\
                 .select("id")\
@@ -140,7 +148,6 @@ async def create_expense(
                     detail="Sale not found"
                 )
 
-        # Validate recurring fields
         if expense_data.is_recurring:
             if not expense_data.recurrence_frequency:
                 raise HTTPException(
@@ -158,7 +165,6 @@ async def create_expense(
                     detail="Day of month is required for monthly recurring expenses"
                 )
 
-        # Build base expense record
         expense_record = {
             "company_id": company["id"],
             "expense_category_id": expense_data.expense_category_id,
@@ -181,7 +187,6 @@ async def create_expense(
             "created_by": current_user.get("id") if isinstance(current_user, dict) else None
         }
 
-        # Create the parent expense
         response = supabase.table("expenses").insert(expense_record).execute()
 
         if not response.data:
@@ -193,7 +198,6 @@ async def create_expense(
         parent_expense = response.data[0]
         parent_id = parent_expense["id"]
 
-        # Generate recurring child expenses
         if expense_data.is_recurring:
             recurring_dates = generate_recurring_dates(
                 start_date=expense_data.expense_date,
@@ -229,6 +233,7 @@ async def create_expense(
 async def get_expenses(
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
+    role: str = Depends(get_current_role),
     supabase: Client = Depends(get_supabase),
     expense_type: Optional[ExpenseType] = Query(None),
     payment_status: Optional[ExpensePaymentStatus] = Query(None),
@@ -238,7 +243,7 @@ async def get_expenses(
     include_recurring_children: bool = Query(True),
     limit: int = Query(100, le=500)
 ):
-    """Get all expenses"""
+    """Get all expenses - shop_attendants only see sales expenses"""
     try:
         query = supabase.table("expenses")\
             .select("*, expense_categories(id, name, expense_type), suppliers(id, name), sales(id, sale_number, sale_type)")\
@@ -246,7 +251,10 @@ async def get_expenses(
             .order("expense_date", desc=True)\
             .limit(limit)
 
-        if expense_type:
+        # Shop attendants can only see sales expenses
+        if role != "admin":
+            query = query.eq("expense_type", ExpenseType.sales.value)
+        elif expense_type:
             query = query.eq("expense_type", expense_type.value)
 
         if payment_status:
@@ -299,6 +307,7 @@ async def get_expense(
     expense_id: str,
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
+    role: str = Depends(get_current_role),
     supabase: Client = Depends(get_supabase)
 ):
     """Get a specific expense"""
@@ -316,6 +325,14 @@ async def get_expense(
             )
 
         expense = response.data[0]
+
+        # Block shop_attendant from viewing standard expenses
+        if role != "admin" and expense.get("expense_type") == ExpenseType.standard.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: standard expenses are restricted to admin users"
+            )
+
         expense["category"] = expense.pop("expense_categories", None)
         expense["supplier"] = expense.pop("suppliers", None)
         expense["sale"] = expense.pop("sales", None)
@@ -345,6 +362,7 @@ async def update_expense(
     expense_data: ExpenseUpdate,
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
+    role: str = Depends(get_current_role),
     supabase: Client = Depends(get_supabase)
 ):
     """Update an expense"""
@@ -361,6 +379,13 @@ async def update_expense(
                 detail="Expense not found"
             )
 
+        # Block shop_attendant from editing standard expenses
+        if role != "admin" and existing.data[0].get("expense_type") == ExpenseType.standard.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: standard expenses are restricted to admin users"
+            )
+
         update_data = {k: v for k, v in expense_data.model_dump().items() if v is not None}
 
         if "expense_date" in update_data:
@@ -369,7 +394,6 @@ async def update_expense(
         if "payment_status" in update_data:
             update_data["payment_status"] = update_data["payment_status"].value
 
-        # Recalculate amount_due if amount changes
         if "amount" in update_data:
             current = existing.data[0]
             update_data["amount"] = to_float(update_data["amount"])
@@ -399,6 +423,7 @@ async def record_expense_payment(
     payment_data: ExpensePaymentCreate,
     current_user = Depends(get_current_user),
     company = Depends(get_current_company),
+    role: str = Depends(get_current_role),
     supabase: Client = Depends(get_supabase)
 ):
     """Record a payment for an expense"""
@@ -417,20 +442,25 @@ async def record_expense_payment(
 
         expense = expense_response.data[0]
 
+        # Block shop_attendant from paying standard expenses
+        if role != "admin" and expense.get("expense_type") == ExpenseType.standard.value:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: standard expenses are restricted to admin users"
+            )
+
         if payment_data.amount > Decimal(str(expense["amount_due"])):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Payment amount (KES {payment_data.amount:,.2f}) exceeds amount due (KES {expense['amount_due']:,.2f})"
             )
 
-        # Validate reference number for non-cash payments
         if payment_data.payment_method.value in ["mpesa", "bank", "card"] and not payment_data.reference_number:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Reference number is required for {payment_data.payment_method.value} payments"
             )
 
-        # Create payment record
         payment_response = supabase.table("expense_payments").insert({
             "company_id": company["id"],
             "expense_id": expense_id,
@@ -448,7 +478,6 @@ async def record_expense_payment(
                 detail="Failed to record payment"
             )
 
-        # Update expense payment status
         new_amount_paid = Decimal(str(expense["amount_paid"])) + payment_data.amount
         new_amount_due = Decimal(str(expense["amount_due"])) - payment_data.amount
 

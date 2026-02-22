@@ -4,6 +4,7 @@ from fastapi.responses import ORJSONResponse
 from app.core.config import settings
 from app.api.v1 import (
     auth, 
+    team,
     product_categories, 
     products, 
     product_variants, 
@@ -53,6 +54,7 @@ app.include_router(sales.router, prefix=f"{settings.API_V1_PREFIX}/sales", tags=
 app.include_router(analytics.router, prefix=f"{settings.API_V1_PREFIX}/analytics", tags=["Analytics"])
 app.include_router(expense_categories.router, prefix=f"{settings.API_V1_PREFIX}/expense-categories", tags=["Expense Categories"])
 app.include_router(expenses.router, prefix=f"{settings.API_V1_PREFIX}/expenses", tags=["Expenses"])
+app.include_router(team.router, prefix=f"{settings.API_V1_PREFIX}/team", tags=["Team"])
 @app.get("/")
 async def root():
     return {

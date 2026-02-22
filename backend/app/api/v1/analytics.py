@@ -26,11 +26,11 @@ from app.schemas.analytics import (
     IncomingPaymentsSummary,
     DashboardSummary
 )
-from app.api.deps import get_current_user, get_current_company
+from app.api.deps import get_current_user, get_current_company, require_admin
 from app.utils.supabase import get_supabase
 from supabase import Client
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 # ==========================================
 # SALES ANALYTICS
@@ -42,7 +42,6 @@ async def get_sales_overview(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get complete sales overview metrics"""
     try:
         response = supabase.table("sales_overview")\
             .select("*")\
@@ -69,6 +68,8 @@ async def get_sales_overview(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -79,7 +80,6 @@ async def get_sales_by_period(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get sales aggregated by time periods"""
     try:
         response = supabase.table("sales_by_period")\
             .select("*")\
@@ -100,6 +100,8 @@ async def get_sales_by_period(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -110,7 +112,6 @@ async def get_credit_notes_by_period(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get credit note (return) amounts by period"""
     try:
         response = supabase.table("credit_notes_by_period")\
             .select("*")\
@@ -127,6 +128,8 @@ async def get_credit_notes_by_period(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -138,7 +141,6 @@ async def get_daily_sales_trend(
     supabase: Client = Depends(get_supabase),
     days: int = Query(30, ge=1, le=365)
 ):
-    """Get daily sales trend for charts"""
     try:
         response = supabase.table("daily_sales_trend")\
             .select("*")\
@@ -148,6 +150,8 @@ async def get_daily_sales_trend(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -162,7 +166,6 @@ async def get_inventory_summary(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get inventory value and metrics"""
     try:
         response = supabase.table("inventory_summary")\
             .select("*")\
@@ -180,6 +183,8 @@ async def get_inventory_summary(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -190,7 +195,6 @@ async def get_inventory_payment_status(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get inventory payment status"""
     try:
         response = supabase.table("inventory_payment_status")\
             .select("*")\
@@ -211,6 +215,8 @@ async def get_inventory_payment_status(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -221,7 +227,6 @@ async def get_low_stock_alerts(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get products with low stock"""
     try:
         response = supabase.table("low_stock_alerts")\
             .select("*")\
@@ -229,6 +234,8 @@ async def get_low_stock_alerts(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -239,7 +246,6 @@ async def get_stock_movement(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get stock movement summary"""
     try:
         response = supabase.table("stock_movement_summary")\
             .select("*")\
@@ -247,6 +253,8 @@ async def get_stock_movement(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -270,6 +278,8 @@ async def get_customer_sales_analysis(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -289,6 +299,8 @@ async def get_customer_payment_analysis(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -308,6 +320,8 @@ async def get_top_customers(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -331,6 +345,8 @@ async def get_top_selling_products(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -348,6 +364,8 @@ async def get_sales_by_category(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -378,6 +396,8 @@ async def get_payment_collection_rate(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -418,6 +438,8 @@ async def get_expense_summary(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -448,6 +470,8 @@ async def get_expenses_by_period(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -465,6 +489,8 @@ async def get_expenses_by_category(
             .execute()
 
         return response.data
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -493,6 +519,8 @@ async def get_outgoing_inventory_payments(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -517,6 +545,8 @@ async def get_outgoing_expense_payments(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -541,6 +571,8 @@ async def get_credit_note_refunds(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -572,6 +604,8 @@ async def get_incoming_payments(
             )
 
         return response.data[0]
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -586,7 +620,6 @@ async def get_dashboard_summary(
     company = Depends(get_current_company),
     supabase: Client = Depends(get_supabase)
 ):
-    """Get complete dashboard summary"""
     try:
         sales_by_period = await get_sales_by_period(current_user, company, supabase)
         credit_notes_by_period = await get_credit_notes_by_period(current_user, company, supabase)
@@ -619,5 +652,7 @@ async def get_dashboard_summary(
             payment_collection_rate=collection_rate,
             expense_summary=expense_summary
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

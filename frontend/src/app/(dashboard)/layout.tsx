@@ -3,8 +3,9 @@
 import { useAuthStore } from '@/store/authStore';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import CompanySwitcher from '@/components/CompanySwitcher';
+import { teamAPI } from '@/lib/team';
 import {
   Package,
   Warehouse,
@@ -16,24 +17,62 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Receipt,
 } from 'lucide-react';
 
-const navItems = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Products', href: '/products/list', icon: Package },
-  { name: 'Suppliers', href: '/suppliers/payment-terms', icon: Truck },
-  { name: 'Inventory', href: '/inventory/locations', icon: Warehouse },
-  { name: 'Customers', href: '/customers/list', icon: Users },
-  { name: 'Sales', href: '/sales', icon: ShoppingCart },
-  { name: 'Expenses', href: '/expenses', icon: ShoppingCart },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+const allNavItems = [
+  { name: 'Dashboard', href: '/', icon: LayoutDashboard, adminOnly: false },
+  { name: 'Products', href: '/products/list', icon: Package, adminOnly: false },
+  { name: 'Suppliers', href: '/suppliers/payment-terms', icon: Truck, adminOnly: false },
+  { name: 'Inventory', href: '/inventory/locations', icon: Warehouse, adminOnly: false },
+  { name: 'Customers', href: '/customers/list', icon: Users, adminOnly: false },
+  { name: 'Sales', href: '/sales', icon: ShoppingCart, adminOnly: false },
+  { name: 'Expenses', href: '/expenses', icon: Receipt, adminOnly: false },
+  { name: 'Analytics', href: '/analytics', icon: BarChart3, adminOnly: true },
 ];
 
+// Routes that require admin — redirect shop_attendants away
+const adminOnlyPaths = ['/analytics'];
+
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { logout } = useAuthStore();
+  const { logout, role, setRole, isAdmin } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [roleLoaded, setRoleLoaded] = useState(false);
+
+  // Load role on mount if not already set
+  useEffect(() => {
+    const loadRole = async () => {
+      if (!role) {
+        try {
+          const me = await teamAPI.getMe();
+          setRole(me.role);
+        } catch (error) {
+          console.error('Failed to load role:', error);
+        }
+      }
+      setRoleLoaded(true);
+    };
+    loadRole();
+  }, [role, setRole]);
+
+  // Redirect shop_attendants away from admin-only pages
+  useEffect(() => {
+    if (!roleLoaded) return;
+    if (role === 'shop_attendant') {
+      const isRestricted = adminOnlyPaths.some(path => pathname.startsWith(path));
+      if (isRestricted) {
+        router.replace('/');
+      }
+    }
+  }, [role, pathname, roleLoaded, router]);
+
+  // Filter nav items based on role
+  const navItems = allNavItems.filter(item => {
+    if (item.adminOnly && role !== 'admin') return false;
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex">
@@ -90,8 +129,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-3 border-t border-gray-200">
+        {/* Role Badge + Logout */}
+        <div className="p-3 border-t border-gray-200 space-y-2">
+          {!collapsed && role && (
+            <div className="px-3 py-1.5 rounded-lg bg-gray-50 text-center">
+              <span className={`text-xs font-semibold ${
+                role === 'admin' ? 'text-blue-600' : 'text-gray-500'
+              }`}>
+                {role === 'admin' ? '★ Admin' : 'Shop Attendant'}
+              </span>
+            </div>
+          )}
           <button
             onClick={() => { logout(); router.push('/login'); }}
             title={collapsed ? 'Logout' : undefined}
